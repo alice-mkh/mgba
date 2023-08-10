@@ -183,7 +183,7 @@ static size_t
 mgba_core_get_row_stride (HsCore *core)
 {
   mGBACore *self = MGBA_CORE (core);
-  int width, height;
+  unsigned width, height;
 
   self->core->baseVideoSize (self->core, &width, &height);
 
