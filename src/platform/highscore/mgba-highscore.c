@@ -5,10 +5,14 @@
 #include <mgba/core/log.h>
 #include <mgba/core/serialize.h>
 #include <mgba/gb/core.h>
+#include <mgba/gb/interface.h>
 #include <mgba/gba/core.h>
+#include <mgba/internal/gb/gb.h>
 #include <mgba/internal/gb/input.h>
+#include <mgba/internal/gb/overrides.h>
 #include <mgba/internal/gba/input.h>
 
+#include <mgba-util/crc32.h>
 #include <mgba-util/image.h>
 #include <mgba-util/vfs.h>
 
@@ -28,6 +32,8 @@ struct _mGBACore
   int16_t *audio_buffer;
 
   struct mStandardLogger logger;
+
+  HsGameBoyModel model;
 };
 
 static void mgba_game_boy_core_init (HsGameBoyCoreInterface *iface);
@@ -51,6 +57,125 @@ is_gb (mGBACore *self)
   platform = hs_platform_get_base_platform (platform);
 
   return platform == HS_PLATFORM_GAME_BOY;
+}
+
+static void
+switch_to_specific_model (mGBACore *self, enum GBModel model)
+{
+  enum GBColorLookup colors;
+  const char *model_name;
+
+  switch (model) {
+  case GB_MODEL_DMG:
+  case GB_MODEL_MGB:
+    colors = GB_COLORS_NONE;
+    break;
+  case GB_MODEL_CGB:
+  case GB_MODEL_AGB:
+    colors = GB_COLORS_CGB;
+    break;
+  case GB_MODEL_SGB:
+  case GB_MODEL_SGB2:
+    colors = GB_COLORS_SGB;
+    break;
+  case GB_MODEL_AUTODETECT:
+  default:
+    g_assert_not_reached ();
+  }
+
+  model_name = GBModelToName (model);
+
+  mCoreConfigSetDefaultValue (&self->core->config, "gb.model", model_name);
+  mCoreConfigSetDefaultValue (&self->core->config, "sgb.model", model_name);
+  mCoreConfigSetDefaultValue (&self->core->config, "cgb.model", model_name);
+  mCoreConfigSetDefaultValue (&self->core->config, "cgb.hybridModel", model_name);
+  mCoreConfigSetDefaultValue (&self->core->config, "cgb.sgbModel", model_name);
+
+  mCoreConfigSetDefaultIntValue (&self->core->config, "gb.colors", colors);
+}
+
+static void
+sync_model (mGBACore *self)
+{
+  if (self->model == HS_GAME_BOY_MODEL_AUTO_PREFER_GBC ||
+      self->model == HS_GAME_BOY_MODEL_AUTO_PREFER_SGB) {
+    struct GBCartridgeOverride override;
+    struct GB *gb = (struct GB *) self->core->board;
+    bool has_gbc_override, has_sgb_override;
+    bool gbc_enhanced = false, sgb_enhanced = false;
+    int valid_models;
+
+    if (!gb->memory.rom || gb->memory.romSize < sizeof (struct GBCartridge) + 0x100) {
+      switch_to_specific_model (self, GB_MODEL_DMG);
+      return;
+    }
+
+    valid_models = GBValidModels(gb->memory.rom);
+
+    switch (valid_models) {
+    case GB_MODEL_SGB | GB_MODEL_MGB:
+      sgb_enhanced = true;
+      break;
+    case GB_MODEL_SGB | GB_MODEL_CGB: // TODO: Do these even exist?
+    case GB_MODEL_MGB | GB_MODEL_SGB | GB_MODEL_CGB:
+      sgb_enhanced = gbc_enhanced = true;
+      break;
+    case GB_MODEL_CGB:
+    case GB_MODEL_MGB | GB_MODEL_CGB:
+      gbc_enhanced = true;
+      break;
+    default:
+      break;
+    }
+
+    override.headerCrc32 = doCrc32 (&gb->memory.rom[0x100], sizeof (struct GBCartridge));
+    has_gbc_override = GBOverrideColorFind (&override, GB_COLORS_CGB);
+    has_sgb_override = GBOverrideColorFind (&override, GB_COLORS_SGB);
+
+    if ((sgb_enhanced && gbc_enhanced) || (has_sgb_override && has_gbc_override)) {
+      if (self->model == HS_GAME_BOY_MODEL_AUTO_PREFER_GBC)
+        switch_to_specific_model (self, GB_MODEL_CGB);
+      else
+        switch_to_specific_model (self, GB_MODEL_SGB);
+
+      return;
+    }
+
+    if (sgb_enhanced || (has_sgb_override && !gbc_enhanced)) {
+      switch_to_specific_model (self, GB_MODEL_SGB);
+      return;
+    }
+
+    if (gbc_enhanced || has_gbc_override) {
+      switch_to_specific_model (self, GB_MODEL_CGB);
+      return;
+    }
+
+    switch_to_specific_model (self, GB_MODEL_DMG);
+  } else {
+    enum GBModel model;
+
+    switch (self->model) {
+    case HS_GAME_BOY_MODEL_GAME_BOY:
+      model = GB_MODEL_DMG;
+      break;
+    case HS_GAME_BOY_MODEL_GAME_BOY_COLOR:
+      model = GB_MODEL_CGB;
+      break;
+    case HS_GAME_BOY_MODEL_GAME_BOY_ADVANCE:
+      model = GB_MODEL_AGB;
+      break;
+    case HS_GAME_BOY_MODEL_SUPER_GAME_BOY:
+      model = GB_MODEL_SGB;
+      break;
+    case HS_GAME_BOY_MODEL_AUTO_PREFER_GBC:
+    case HS_GAME_BOY_MODEL_AUTO_PREFER_SGB:
+    default:
+      g_assert_not_reached ();
+    }
+
+    switch_to_specific_model (self, model);
+  }
 }
 
 static gboolean
@@ -81,6 +206,9 @@ mgba_core_start (HsCore      *core,
 
     return FALSE;
   }
+
+  if (is_gb (self))
+    sync_model (self);
 
   self->core->reset (self->core);
 
@@ -331,10 +459,20 @@ mgba_game_boy_core_button_released (HsGameBoyCore *core, HsGameBoyButton button)
 }
 
 static void
+mgba_game_boy_core_set_model (HsGameBoyCore *core, HsGameBoyModel model)
+{
+  mGBACore *self = MGBA_CORE (core);
+
+  self->model = model;
+}
+
+static void
 mgba_game_boy_core_init (HsGameBoyCoreInterface *iface)
 {
   iface->button_pressed = mgba_game_boy_core_button_pressed;
   iface->button_released = mgba_game_boy_core_button_released;
+
+  iface->set_model = mgba_game_boy_core_set_model;
 }
 
 const int gba_button_mapping[] = {
