@@ -201,7 +201,8 @@ mgba_core_get_sample_rate (HsCore *core)
 }
 
 static void
-postAudioBuffer (struct mAVStream* stream, blip_t* left, blip_t* right) {
+postAudioBuffer (struct mAVStream* stream, blip_t* left, blip_t* right)
+{
   int produced;
 
   UNUSED(stream);
@@ -397,11 +398,11 @@ mgba_game_boy_core_set_palette (HsGameBoyCore *core, int *colors, int n_colors)
 }
 
 static void
-mgba_game_boy_core_set_enable_sgb_border (HsGameBoyCore *core, gboolean enable_border)
+mgba_game_boy_core_set_show_sgb_borders (HsGameBoyCore *core, gboolean show_borders)
 {
   mGBACore *self = MGBA_CORE (core);
 
-  mCoreConfigSetDefaultIntValue (&self->core->config, "sgb.borders", enable_border ? 1 : 0);
+  mCoreConfigSetDefaultIntValue (&self->core->config, "sgb.borders", show_borders ? 1 : 0);
 
   self->core->reloadConfigOption (self->core, "sgb.borders", NULL);
 }
@@ -414,7 +415,7 @@ mgba_game_boy_core_init (HsGameBoyCoreInterface *iface)
 
   iface->set_model = mgba_game_boy_core_set_model;
   iface->set_palette = mgba_game_boy_core_set_palette;
-  iface->set_enable_sgb_border = mgba_game_boy_core_set_enable_sgb_border;
+  iface->set_show_sgb_borders = mgba_game_boy_core_set_show_sgb_borders;
 }
 
 const int gba_button_mapping[] = {
