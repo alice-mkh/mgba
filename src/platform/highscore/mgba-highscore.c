@@ -50,11 +50,7 @@ is_gba (mGBACore *self)
 static inline gboolean
 is_gb (mGBACore *self)
 {
-  HsPlatform platform = hs_core_get_platform (HS_CORE (self));
-
-  platform = hs_platform_get_base_platform (platform);
-
-  return platform == HS_PLATFORM_GAME_BOY;
+  return hs_core_get_platform (HS_CORE (self)) == HS_PLATFORM_GAME_BOY;
 }
 
 static gboolean
