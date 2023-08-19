@@ -28,7 +28,7 @@ struct _mGBACore
 
   struct mCore *core;
   struct mAVStream stream;
-  gpointer output_buffer;
+  HsSoftwareContext *context;
   int16_t *audio_buffer;
 
   struct mStandardLogger logger;
@@ -53,6 +53,17 @@ is_gb (mGBACore *self)
   return hs_core_get_platform (HS_CORE (self)) == HS_PLATFORM_GAME_BOY;
 }
 
+static inline void
+refresh_screen_area (mGBACore *self)
+{
+  unsigned width, height;
+
+  self->core->currentVideoSize (self->core, &width, &height);
+
+  hs_software_context_set_area (self->context,
+                                &HS_RECTANGLE_INIT (0, 0, width, height));
+}
+
 static gboolean
 mgba_core_start (HsCore      *core,
                  const char  *rom_path,
@@ -70,11 +81,13 @@ mgba_core_start (HsCore      *core,
 
   self->core->baseVideoSize (self->core, &width, &height);
 
-  self->output_buffer = hs_core_request_framebuffer (HS_CORE (self),
-                                                     width, height,
-                                                     HS_PIXEL_FORMAT_XRGB8888);
+  self->context = hs_core_create_software_context (HS_CORE (self),
+                                                   width, height,
+                                                   HS_PIXEL_FORMAT_XRGB8888);
 
-  self->core->setVideoBuffer (self->core, self->output_buffer, width);
+  self->core->setVideoBuffer (self->core,
+                              hs_software_context_get_framebuffer (self->context),
+                              width);
 
   if (!mCoreLoadFile (self->core, rom_path)) {
     g_set_error (error, HS_CORE_ERROR, HS_CORE_ERROR_COULDNT_LOAD_ROM, "Failed to load ROM");
@@ -86,6 +99,8 @@ mgba_core_start (HsCore      *core,
 
   mCoreLoadSaveFile (self->core, save_path, FALSE);
 
+  refresh_screen_area (self);
+
   return TRUE;
 }
 
@@ -95,6 +110,16 @@ mgba_core_reset (HsCore *core)
   mGBACore *self = MGBA_CORE (core);
 
   self->core->reset (self->core);
+
+  refresh_screen_area (self);
+}
+
+static void
+mgba_core_stop (HsCore *core)
+{
+  mGBACore *self = MGBA_CORE (core);
+
+  g_clear_object (&self->context);
 }
 
 static void
@@ -127,6 +152,8 @@ mgba_core_load_state (HsCore      *core,
   mCoreLoadStateNamed (self->core, vf, SAVESTATE_SAVEDATA | SAVESTATE_RTC);
 
   vf->close (vf);
+
+  refresh_screen_area (self);
 
   return TRUE;
 }
@@ -163,31 +190,6 @@ mgba_core_get_aspect_ratio (HsCore *core)
   self->core->currentVideoSize (self->core, &width, &height);
 
   return (double) width / (double) height;
-}
-
-static gboolean
-mgba_core_get_screen_rect (HsCore      *core,
-                           HsRectangle *rect)
-{
-  mGBACore *self = MGBA_CORE (core);
-  unsigned width, height;
-
-  self->core->currentVideoSize (self->core, &width, &height);
-
-  hs_rectangle_init (rect, 0, 0, width, height);
-
-  return TRUE;
-}
-
-static size_t
-mgba_core_get_row_stride (HsCore *core)
-{
-  mGBACore *self = MGBA_CORE (core);
-  unsigned width, height;
-
-  self->core->baseVideoSize (self->core, &width, &height);
-
-  return width * BYTES_PER_PIXEL;
 }
 
 static double
@@ -283,6 +285,7 @@ mgba_core_class_init (mGBACoreClass *klass)
 
   core_class->start = mgba_core_start;
   core_class->reset = mgba_core_reset;
+  core_class->stop = mgba_core_stop;
   core_class->run_frame = mgba_core_run_frame;
 
   core_class->load_state = mgba_core_load_state;
@@ -290,8 +293,6 @@ mgba_core_class_init (mGBACoreClass *klass)
 
   core_class->get_frame_rate = mgba_core_get_frame_rate;
   core_class->get_aspect_ratio = mgba_core_get_aspect_ratio;
-  core_class->get_screen_rect = mgba_core_get_screen_rect;
-  core_class->get_row_stride = mgba_core_get_row_stride;
 
   core_class->get_sample_rate = mgba_core_get_sample_rate;
 }
