@@ -141,10 +141,10 @@ mgba_core_run_frame (HsCore *core)
   }
 }
 
-static gboolean
-mgba_core_load_state (HsCore      *core,
-                      const char  *path,
-                      GError     **error)
+static void
+mgba_core_load_state (HsCore          *core,
+                      const char      *path,
+                      HsStateCallback  callback)
 {
   mGBACore *self = MGBA_CORE (core);
   struct VFile* vf = VFileOpen (path, O_RDONLY);
@@ -155,13 +155,13 @@ mgba_core_load_state (HsCore      *core,
 
   refresh_screen_area (self);
 
-  return TRUE;
+  callback (core, NULL);
 }
 
-static gboolean
-mgba_core_save_state (HsCore      *core,
-                      const char  *path,
-                      GError     **error)
+static void
+mgba_core_save_state (HsCore          *core,
+                      const char      *path,
+                      HsStateCallback  callback)
 {
   mGBACore *self = MGBA_CORE (core);
   struct VFile* vf = VFileOpen (path, O_CREAT | O_TRUNC | O_RDWR);
@@ -170,7 +170,7 @@ mgba_core_save_state (HsCore      *core,
 
   vf->close (vf);
 
-  return TRUE;
+  callback (core, NULL);
 }
 
 static double
