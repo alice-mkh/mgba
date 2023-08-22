@@ -226,7 +226,7 @@ mgba_core_constructed (GObject *object)
   else if (is_gb (self))
     self->core = GBCoreCreate ();
   else
-    g_error ("Unsupported platform");
+    g_assert_not_reached ();
 
   mCoreInitConfig (self->core, NULL);
 
