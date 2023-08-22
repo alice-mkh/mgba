@@ -31,7 +31,7 @@ struct _mGBACore
   HsSoftwareContext *context;
   int16_t *audio_buffer;
 
-  struct mStandardLogger logger;
+  struct mLogger logger;
 };
 
 static void mgba_game_boy_core_init (HsGameBoyCoreInterface *iface);
@@ -63,6 +63,43 @@ refresh_screen_area (mGBACore *self)
   hs_software_context_set_area (self->context,
                                 &HS_RECTANGLE_INIT (0, 0, width, height));
 }
+
+static void
+log_cb (struct mLogger* logger, int category, enum mLogLevel level, const char* format, va_list args) {
+  UNUSED(logger);
+
+  HsLogLevel hs_level;
+  switch (level) {
+  case mLOG_FATAL:
+  case mLOG_ERROR:
+    hs_level = HS_LOG_CRITICAL;
+    break;
+  case mLOG_WARN:
+    hs_level = HS_LOG_WARNING;
+    break;
+  case mLOG_INFO:
+    hs_level = HS_LOG_INFO;
+    break;
+  case mLOG_DEBUG:
+  case mLOG_STUB:
+  case mLOG_GAME_ERROR:
+  default:
+    hs_level = HS_LOG_DEBUG;
+    break;
+  }
+
+  GString *builder = g_string_new (NULL);
+  g_string_append (builder, mLogCategoryName (category));
+  g_string_append (builder, ": ");
+  g_string_vprintf (builder, format, args);
+
+  char *message = g_string_free_and_steal (builder);
+
+  hs_core_log (HS_CORE (core), hs_level, message);
+
+  g_free (message);
+}
+
 
 static gboolean
 mgba_core_start (HsCore      *core,
@@ -235,11 +272,8 @@ mgba_core_constructed (GObject *object)
   };
   mCoreConfigLoadDefaults (&self->core->config, &opts);
 
-  mCoreConfigSetDefaultIntValue (&self->core->config, "logToStdout", false);
-
-  mStandardLoggerInit (&self->logger);
-  mStandardLoggerConfig (&self->logger, &self->core->config);
-  mLogSetDefaultLogger (&self->logger.d);
+  self->logger.log = log_cb;
+  mLogSetDefaultLogger(&self->logger);
 
   self->core->init (self->core);
 
@@ -263,7 +297,6 @@ mgba_core_finalize (GObject *object)
 {
   mGBACore *self = MGBA_CORE (object);
 
-  mStandardLoggerDeinit (&self->logger);
   mCoreConfigDeinit (&self->core->config);
   self->core->deinit (self->core);
   if (self->audio_buffer)
