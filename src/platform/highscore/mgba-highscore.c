@@ -102,10 +102,10 @@ log_cb (struct mLogger* logger, int category, enum mLogLevel level, const char* 
 
 
 static gboolean
-mgba_core_start (HsCore      *core,
-                 const char  *rom_path,
-                 const char  *save_path,
-                 GError     **error)
+mgba_core_load_rom (HsCore      *core,
+                    const char  *rom_path,
+                    const char  *save_path,
+                    GError     **error)
 {
   mGBACore *self = MGBA_CORE (core);
 
@@ -316,7 +316,7 @@ mgba_core_class_init (mGBACoreClass *klass)
   object_class->constructed = mgba_core_constructed;
   object_class->finalize = mgba_core_finalize;
 
-  core_class->start = mgba_core_start;
+  core_class->load_rom = mgba_core_load_rom;
   core_class->reset = mgba_core_reset;
   core_class->stop = mgba_core_stop;
   core_class->run_frame = mgba_core_run_frame;
