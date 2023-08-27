@@ -1032,6 +1032,8 @@ if(BUILD_HIGHSCORE)
 	pkg_check_modules(GOBJECT REQUIRED gobject-2.0)
 	pkg_check_modules(LIBHIGHSCORE REQUIRED highscore-1)
 	file(GLOB HS_SRC ${CMAKE_CURRENT_SOURCE_DIR}/src/platform/highscore/*.c)
+	set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fvisibility=hidden")
+	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fvisibility=hidden")
 	add_library(${BINARY_NAME}-highscore MODULE ${CORE_SRC} ${OS_SRC} ${HS_SRC})
 	set_target_properties(${BINARY_NAME}-highscore PROPERTIES
 		OUTPUT_NAME ${PROJECT_NAME}-highscore
