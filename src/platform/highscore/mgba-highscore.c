@@ -159,6 +159,56 @@ mgba_core_stop (HsCore *core)
   g_clear_object (&self->context);
 }
 
+const int GB_BUTTON_MAPPING[] = {
+  GB_KEY_UP,
+  GB_KEY_DOWN,
+  GB_KEY_LEFT,
+  GB_KEY_RIGHT,
+  GB_KEY_A,
+  GB_KEY_B,
+  GB_KEY_SELECT,
+  GB_KEY_START,
+};
+
+const int GBA_BUTTON_MAPPING[] = {
+  GBA_KEY_UP,
+  GBA_KEY_DOWN,
+  GBA_KEY_LEFT,
+  GBA_KEY_RIGHT,
+  GBA_KEY_A,
+  GBA_KEY_B,
+  GBA_KEY_SELECT,
+  GBA_KEY_START,
+  GBA_KEY_L,
+  GBA_KEY_R,
+};
+
+static void
+mgba_core_poll_input (HsCore *core, HsInputState *input_state)
+{
+  mGBACore *self = MGBA_CORE (core);
+
+  uint32_t keys = 0;
+
+  if (is_gba (self)) {
+    uint32_t buttons = input_state->game_boy_advance.buttons;
+
+    for (int btn = 0; btn < HS_GAME_BOY_ADVANCE_N_BUTTONS; btn++) {
+      if (buttons & 1 << btn)
+        keys |= 1 << GBA_BUTTON_MAPPING[btn];
+    }
+  } else {
+    uint32_t buttons = input_state->game_boy.buttons;
+
+    for (int btn = 0; btn < HS_GAME_BOY_N_BUTTONS; btn++) {
+      if (buttons & 1 << btn)
+        keys |= 1 << GB_BUTTON_MAPPING[btn];
+    }
+  }
+
+  self->core->setKeys (self->core, keys);
+}
+
 static void
 mgba_core_run_frame (HsCore *core)
 {
@@ -319,6 +369,7 @@ mgba_core_class_init (mGBACoreClass *klass)
   core_class->load_rom = mgba_core_load_rom;
   core_class->reset = mgba_core_reset;
   core_class->stop = mgba_core_stop;
+  core_class->poll_input = mgba_core_poll_input;
   core_class->run_frame = mgba_core_run_frame;
 
   core_class->load_state = mgba_core_load_state;
@@ -336,33 +387,6 @@ mgba_core_init (mGBACore *self)
   g_assert (!core);
 
   core = self;
-}
-
-const int gb_button_mapping[] = {
-  GB_KEY_UP,
-  GB_KEY_DOWN,
-  GB_KEY_LEFT,
-  GB_KEY_RIGHT,
-  GB_KEY_A,
-  GB_KEY_B,
-  GB_KEY_SELECT,
-  GB_KEY_START,
-};
-
-static void
-mgba_game_boy_core_button_pressed (HsGameBoyCore *core, HsGameBoyButton button)
-{
-  mGBACore *self = MGBA_CORE (core);
-
-  self->core->addKeys(self->core, 1 << gb_button_mapping[button]);
-}
-
-static void
-mgba_game_boy_core_button_released (HsGameBoyCore *core, HsGameBoyButton button)
-{
-  mGBACore *self = MGBA_CORE (core);
-
-  self->core->clearKeys(self->core, 1 << gb_button_mapping[button]);
 }
 
 static void
@@ -440,48 +464,14 @@ mgba_game_boy_core_set_show_sgb_borders (HsGameBoyCore *core, gboolean show_bord
 static void
 mgba_game_boy_core_init (HsGameBoyCoreInterface *iface)
 {
-  iface->button_pressed = mgba_game_boy_core_button_pressed;
-  iface->button_released = mgba_game_boy_core_button_released;
-
   iface->set_model = mgba_game_boy_core_set_model;
   iface->set_palette = mgba_game_boy_core_set_palette;
   iface->set_show_sgb_borders = mgba_game_boy_core_set_show_sgb_borders;
 }
 
-const int gba_button_mapping[] = {
-  GBA_KEY_UP,
-  GBA_KEY_DOWN,
-  GBA_KEY_LEFT,
-  GBA_KEY_RIGHT,
-  GBA_KEY_A,
-  GBA_KEY_B,
-  GBA_KEY_SELECT,
-  GBA_KEY_START,
-  GBA_KEY_L,
-  GBA_KEY_R,
-};
-
-static void
-mgba_game_boy_advance_core_button_pressed (HsGameBoyAdvanceCore *core, HsGameBoyAdvanceButton button)
-{
-  mGBACore *self = MGBA_CORE (core);
-
-  self->core->addKeys(self->core, 1 << gba_button_mapping[button]);
-}
-
-static void
-mgba_game_boy_advance_core_button_released (HsGameBoyAdvanceCore *core, HsGameBoyAdvanceButton button)
-{
-  mGBACore *self = MGBA_CORE (core);
-
-  self->core->clearKeys(self->core, 1 << gba_button_mapping[button]);
-}
-
 static void
 mgba_game_boy_advance_core_init (HsGameBoyAdvanceCoreInterface *iface)
 {
-  iface->button_pressed = mgba_game_boy_advance_core_button_pressed;
-  iface->button_released = mgba_game_boy_advance_core_button_released;
 }
 
 GType
