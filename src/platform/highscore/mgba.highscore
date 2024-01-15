@@ -1,7 +1,7 @@
 [Highscore]
 Name=mGBA
 Module=libmGBA-highscore.so
-Copyright=Copyright © 2013 – 2023 Jeffrey Pfau;
+Copyright=Copyright © 2013 – 2023 Vicki Pfau;
 Website=https://mgba.io/
 License=MPL-2.0
 Platforms=GameBoy;GameBoyAdvance;
