@@ -459,6 +459,8 @@ mgba_game_boy_core_set_show_sgb_borders (HsGameBoyCore *core, gboolean show_bord
   mCoreConfigSetDefaultIntValue (&self->core->config, "sgb.borders", show_borders ? 1 : 0);
 
   self->core->reloadConfigOption (self->core, "sgb.borders", NULL);
+
+  refresh_screen_area (self);
 }
 
 static void
