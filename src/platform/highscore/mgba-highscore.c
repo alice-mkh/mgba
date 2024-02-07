@@ -228,6 +228,18 @@ mgba_core_run_frame (HsCore *core)
   }
 }
 
+static gboolean
+mgba_core_reload_save (HsCore      *core,
+                       const char  *save_path,
+                       GError     **error)
+{
+  mGBACore *self = MGBA_CORE (core);
+
+  mCoreLoadSaveFile (self->core, save_path, FALSE);
+
+  return TRUE;
+}
+
 static void
 mgba_core_load_state (HsCore          *core,
                       const char      *path,
@@ -371,6 +383,8 @@ mgba_core_class_init (mGBACoreClass *klass)
   core_class->stop = mgba_core_stop;
   core_class->poll_input = mgba_core_poll_input;
   core_class->run_frame = mgba_core_run_frame;
+
+  core_class->reload_save = mgba_core_reload_save;
 
   core_class->load_state = mgba_core_load_state;
   core_class->save_state = mgba_core_save_state;
