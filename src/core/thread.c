@@ -153,7 +153,7 @@ void _frameStarted(void* context) {
 		return;
 	}
 	if (thread->core->opts.rewindEnable && thread->core->opts.rewindBufferCapacity > 0) {
-		if (!thread->impl->rewinding || !mCoreRewindRestore(&thread->impl->rewind, thread->core)) {
+		if (!thread->impl->rewinding || !mCoreRewindRestore(&thread->impl->rewind, thread->core, 1)) {
 			if (thread->impl->rewind.rewindFrameCounter == 0) {
 				mCoreRewindAppend(&thread->impl->rewind, thread->core);
 				thread->impl->rewind.rewindFrameCounter = thread->core->opts.rewindBufferInterval;
@@ -218,17 +218,17 @@ ADD_CALLBACK(savedataUpdated)
 ADD_CALLBACK(alarm)
 
 #undef ADD_CALLBACK
-#define CALLBACK(NAME) _script_ ## NAME
+#define SCRIPT(NAME) _script_ ## NAME
 
 static void _mCoreThreadAddCallbacks(struct mCoreThread* threadContext) {
 	struct mCoreCallbacks callbacks = {
-		.videoFrameEnded = CALLBACK(frame),
-		.coreCrashed = CALLBACK(crashed),
-		.sleep = CALLBACK(sleep),
-		.shutdown = CALLBACK(stop),
-		.keysRead = CALLBACK(keysRead),
-		.savedataUpdated = CALLBACK(savedataUpdated),
-		.alarm = CALLBACK(alarm),
+		.videoFrameEnded = SCRIPT(frame),
+		.coreCrashed = SCRIPT(crashed),
+		.sleep = SCRIPT(sleep),
+		.shutdown = SCRIPT(stop),
+		.keysRead = SCRIPT(keysRead),
+		.savedataUpdated = SCRIPT(savedataUpdated),
+		.alarm = SCRIPT(alarm),
 		.context = threadContext
 	};
 	threadContext->core->addCoreCallbacks(threadContext->core, &callbacks);
@@ -245,6 +245,8 @@ static THREAD_ENTRY _mCoreThreadRun(void* context) {
 
 	ThreadLocalSetKey(_contextKey, threadContext);
 	ThreadSetName("CPU Thread");
+
+	mLogSetThreadLogger(&threadContext->logger.d);
 
 #if !defined(_WIN32) && defined(USE_PTHREADS)
 	sigset_t signals;
@@ -762,12 +764,3 @@ struct mCoreThread* mCoreThreadGet(void) {
 	return NULL;
 }
 #endif
-
-struct mLogger* mCoreThreadLogger(void) {
-	struct mCoreThread* thread = mCoreThreadGet();
-	if (thread) {
-		return &thread->logger.d;
-	}
-	return NULL;
-}
-
