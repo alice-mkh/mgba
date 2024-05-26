@@ -1,6 +1,5 @@
 #include "mgba-highscore.h"
 
-#include <mgba/core/blip_buf.h>
 #include <mgba/core/core.h>
 #include <mgba/core/log.h>
 #include <mgba/core/serialize.h>
@@ -17,8 +16,7 @@
 #include <mgba-util/vfs.h>
 
 #define GB_SAMPLES 512
-#define GBA_SAMPLES 1024
-#define SAMPLE_RATE 32768
+#define SAMPLES_PER_FRAME_MOVING_AVG_ALPHA (1.0f / 180.0f)
 
 static mGBACore *core;
 
@@ -29,7 +27,10 @@ struct _mGBACore
   struct mCore *core;
   struct mAVStream stream;
   HsSoftwareContext *context;
+
+  size_t audio_buffer_size;
   int16_t *audio_buffer;
+  float audio_samples_per_frame_avg;
 
   struct mLogger logger;
 };
@@ -108,11 +109,6 @@ mgba_core_load_rom (HsCore      *core,
                     GError     **error)
 {
   mGBACore *self = MGBA_CORE (core);
-
-  blip_set_rates (self->core->getAudioChannel (self->core, 0),
-                  self->core->frequency (self->core), SAMPLE_RATE);
-  blip_set_rates (self->core->getAudioChannel (self->core, 1),
-                  self->core->frequency (self->core), SAMPLE_RATE);
 
   unsigned width, height;
 
@@ -217,14 +213,36 @@ mgba_core_run_frame (HsCore *core)
   self->core->runFrame (self->core);
 
   if (is_gba (self)) {
-    gint16 samples[GBA_SAMPLES * 2];
-    gsize available = 0;
+    struct mAudioBuffer *buffer = self->core->getAudioBuffer (self->core);
+    int available = mAudioBufferAvailable (buffer);
 
-    available = blip_samples_avail (self->core->getAudioChannel (self->core, 0));
-    blip_read_samples (self->core->getAudioChannel (self->core, 0), samples, available, true);
-    blip_read_samples (self->core->getAudioChannel (self->core, 1), samples + 1, available, true);
+    if (available > 0) {
+      size_t samples_to_read;
 
-    hs_core_play_samples (core, samples, available * 2);
+      /* Update 'running average' of number of
+       * samples per frame.
+       * Note that this is not a true running
+       * average, but just a leaky-integrator/
+       * exponential moving average, used because
+       * it is simple and fast (i.e. requires no
+       * window of samples). */
+      self->audio_samples_per_frame_avg =
+        (SAMPLES_PER_FRAME_MOVING_AVG_ALPHA * (float) available) +
+         ((1.0f - SAMPLES_PER_FRAME_MOVING_AVG_ALPHA) * self->audio_samples_per_frame_avg);
+
+      samples_to_read = (size_t) self->audio_samples_per_frame_avg;
+
+      /* Resize audio output buffer, if required */
+      if (self->audio_buffer_size < samples_to_read * 2) {
+        self->audio_buffer_size = samples_to_read * 2;
+        self->audio_buffer = realloc (self->audio_buffer, self->audio_buffer_size * sizeof(int16_t));
+      }
+
+      int produced = mAudioBufferRead (buffer, self->audio_buffer, samples_to_read);
+
+      if (produced > 0)
+        hs_core_play_samples (core, self->audio_buffer, produced * 2);
+    }
   }
 }
 
@@ -294,11 +312,13 @@ mgba_core_get_aspect_ratio (HsCore *core)
 static double
 mgba_core_get_sample_rate (HsCore *core)
 {
-  return SAMPLE_RATE;
+  mGBACore *self = MGBA_CORE (core);
+
+  return self->core->audioSampleRate (self->core);
 }
 
 static void
-postAudioBuffer (struct mAVStream* stream, blip_t* left, blip_t* right)
+postAudioBuffer (struct mAVStream* stream, struct mAudioBuffer* buffer)
 {
   int produced;
 
@@ -306,11 +326,10 @@ postAudioBuffer (struct mAVStream* stream, blip_t* left, blip_t* right)
 
   g_assert (core);
 
-  produced = blip_read_samples (left, core->audio_buffer, GB_SAMPLES, true);
-  produced += blip_read_samples (right, core->audio_buffer + 1, GB_SAMPLES, true);
+  produced = mAudioBufferRead (buffer, core->audio_buffer, GB_SAMPLES);
 
   if (produced > 0)
-    hs_core_play_samples (HS_CORE (core), core->audio_buffer, produced);
+    hs_core_play_samples (HS_CORE (core), core->audio_buffer, produced * 2);
 }
 
 static void
@@ -340,14 +359,31 @@ mgba_core_constructed (GObject *object)
   self->core->init (self->core);
 
   if (is_gba (self)) {
-    self->core->setAudioBufferSize (self->core, GBA_SAMPLES);
+    size_t samples_per_frame;
+
+    samples_per_frame = mgba_core_get_sample_rate (HS_CORE (self)) / mgba_core_get_frame_rate (HS_CORE (self));
+
+    self->audio_buffer_size = samples_per_frame * 2;
+    self->audio_buffer = malloc (self->audio_buffer_size * sizeof(int16_t));
+    self->audio_samples_per_frame_avg = (float) samples_per_frame;
+
+    /* Internal audio buffer size should be
+     * audioSamplesPerFrame, but number of samples
+     * actually generated varies slightly on a
+     * frame-by-frame basis. We therefore allow
+     * for some wriggle room by setting double
+     * what we need (accounting for the hard
+     * coded blip buffer limit of 0x4000). */
+    self->core->setAudioBufferSize (self->core, MIN (samples_per_frame * 2, 0x4000));
   } else {
     self->stream.videoDimensionsChanged = 0;
     self->stream.postAudioFrame = 0;
     self->stream.postAudioBuffer = postAudioBuffer;
     self->stream.postVideoFrame = 0;
 
+    self->audio_buffer_size = GB_SAMPLES * 2;
     self->audio_buffer = malloc (GB_SAMPLES * 2 * sizeof(int16_t));
+    self->audio_samples_per_frame_avg = GB_SAMPLES;
 
     self->core->setAVStream (self->core, &self->stream);
     self->core->setAudioBufferSize (self->core, GB_SAMPLES);
