@@ -64,7 +64,7 @@ static void _seRun(const char* key, void* value, void* user) {
 	se->run(se);
 }
 
-#ifdef USE_DEBUGGERS
+#ifdef ENABLE_DEBUGGERS
 struct mScriptDebuggerEntry {
 	enum mDebuggerEntryReason reason;
 	struct mDebuggerEntryInfo* info;
@@ -98,7 +98,7 @@ void mScriptBridgeInstallEngine(struct mScriptBridge* sb, struct mScriptEngine* 
 	HashTableInsert(&sb->engines, name, se);
 }
 
-#ifdef USE_DEBUGGERS
+#ifdef ENABLE_DEBUGGERS
 void mScriptBridgeSetDebugger(struct mScriptBridge* sb, struct mDebugger* debugger) {
 	if (sb->debugger == debugger) {
 		return;
@@ -129,6 +129,7 @@ void mScriptBridgeRun(struct mScriptBridge* sb) {
 	HashTableEnumerate(&sb->engines, _seRun, NULL);
 }
 
+#ifdef ENABLE_VFS
 bool mScriptBridgeLoadScript(struct mScriptBridge* sb, const char* name) {
 	struct VFile* vf = VFileOpen(name, O_RDONLY);
 	if (!vf) {
@@ -143,6 +144,7 @@ bool mScriptBridgeLoadScript(struct mScriptBridge* sb, const char* name) {
 	vf->close(vf);
 	return info.success;
 }
+#endif
 
 bool mScriptBridgeLookupSymbol(struct mScriptBridge* sb, const char* name, int32_t* out) {
 	struct mScriptSymbol info = {
@@ -159,7 +161,7 @@ struct mScriptMemoryDomain {
 	struct mCoreMemoryBlock block;
 };
 
-#ifdef USE_DEBUGGERS
+#ifdef ENABLE_DEBUGGERS
 struct mScriptBreakpointName {
 	uint32_t address;
 	uint32_t maxAddress;
@@ -182,6 +184,7 @@ struct mScriptDebugger {
 	struct Table cbidMap;
 	struct Table bpidMap;
 	int64_t nextBreakpoint;
+	bool reentered;
 };
 #endif
 
@@ -189,7 +192,7 @@ struct mScriptCoreAdapter {
 	struct mCore* core;
 	struct mScriptContext* context;
 	struct mScriptValue memory;
-#ifdef USE_DEBUGGERS
+#ifdef ENABLE_DEBUGGERS
 	struct mScriptDebugger debugger;
 #endif
 	struct mRumble rumble;
@@ -416,6 +419,7 @@ static struct mScriptValue* _mScriptCoreSaveState(struct mCore* core, int32_t fl
 	return value;
 }
 
+#ifdef ENABLE_VFS
 static int _mScriptCoreSaveStateFile(struct mCore* core, const char* path, int flags) {
 	struct VFile* vf = VFileOpen(path, O_WRONLY | O_TRUNC | O_CREAT);
 	if (!vf) {
@@ -424,13 +428,6 @@ static int _mScriptCoreSaveStateFile(struct mCore* core, const char* path, int f
 	bool ok = mCoreSaveStateNamed(core, vf, flags);
 	vf->close(vf);
 	return ok;
-}
-
-static int32_t _mScriptCoreLoadState(struct mCore* core, struct mScriptString* buffer, int32_t flags) {
-	struct VFile* vf = VFileFromConstMemory(buffer->buffer, buffer->size);
-	int ret = mCoreLoadStateNamed(core, vf, flags);
-	vf->close(vf);
-	return ret;
 }
 
 static int _mScriptCoreLoadStateFile(struct mCore* core, const char* path, int flags) {
@@ -454,6 +451,14 @@ static void _mScriptCoreTakeScreenshot(struct mCore* core, const char* filename)
 	} else {
 		mCoreTakeScreenshot(core);
 	}
+}
+#endif
+
+static int32_t _mScriptCoreLoadState(struct mCore* core, struct mScriptString* buffer, int32_t flags) {
+	struct VFile* vf = VFileFromConstMemory(buffer->buffer, buffer->size);
+	int ret = mCoreLoadStateNamed(core, vf, flags);
+	vf->close(vf);
+	return ret;
 }
 
 static struct mScriptValue* _mScriptCoreTakeScreenshotToImage(struct mCore* core) {
@@ -479,10 +484,12 @@ static struct mScriptValue* _mScriptCoreTakeScreenshotToImage(struct mCore* core
 	return result;
 }
 
+#ifdef ENABLE_VFS
 // Loading functions
 mSCRIPT_DECLARE_STRUCT_METHOD(mCore, BOOL, loadFile, mCoreLoadFile, 1, CHARP, path);
 mSCRIPT_DECLARE_STRUCT_METHOD(mCore, BOOL, autoloadSave, mCoreAutoloadSave, 0);
 mSCRIPT_DECLARE_STRUCT_METHOD(mCore, BOOL, loadSaveFile, mCoreLoadSaveFile, 2, CHARP, path, BOOL, temporary);
+#endif
 
 // Info functions
 mSCRIPT_DECLARE_STRUCT_CD_METHOD(mCore, S32, platform, 0);
@@ -522,27 +529,31 @@ mSCRIPT_DECLARE_STRUCT_METHOD(mCore, WSTR, readRegister, _mScriptCoreReadRegiste
 mSCRIPT_DECLARE_STRUCT_VOID_METHOD(mCore, writeRegister, _mScriptCoreWriteRegister, 2, CHARP, regName, S32, value);
 
 // Savestate functions
-mSCRIPT_DECLARE_STRUCT_METHOD_WITH_DEFAULTS(mCore, BOOL, saveStateSlot, mCoreSaveState, 2, S32, slot, S32, flags);
 mSCRIPT_DECLARE_STRUCT_METHOD_WITH_DEFAULTS(mCore, WSTR, saveStateBuffer, _mScriptCoreSaveState, 1, S32, flags);
+mSCRIPT_DECLARE_STRUCT_METHOD_WITH_DEFAULTS(mCore, BOOL, loadStateBuffer, _mScriptCoreLoadState, 2, STR, buffer, S32, flags);
+#ifdef ENABLE_VFS
+mSCRIPT_DECLARE_STRUCT_METHOD_WITH_DEFAULTS(mCore, BOOL, saveStateSlot, mCoreSaveState, 2, S32, slot, S32, flags);
 mSCRIPT_DECLARE_STRUCT_METHOD_WITH_DEFAULTS(mCore, BOOL, saveStateFile, _mScriptCoreSaveStateFile, 2, CHARP, path, S32, flags);
 mSCRIPT_DECLARE_STRUCT_METHOD_WITH_DEFAULTS(mCore, BOOL, loadStateSlot, mCoreLoadState, 2, S32, slot, S32, flags);
-mSCRIPT_DECLARE_STRUCT_METHOD_WITH_DEFAULTS(mCore, BOOL, loadStateBuffer, _mScriptCoreLoadState, 2, STR, buffer, S32, flags);
 mSCRIPT_DECLARE_STRUCT_METHOD_WITH_DEFAULTS(mCore, BOOL, loadStateFile, _mScriptCoreLoadStateFile, 2, CHARP, path, S32, flags);
 
 // Miscellaneous functions
 mSCRIPT_DECLARE_STRUCT_VOID_METHOD_WITH_DEFAULTS(mCore, screenshot, _mScriptCoreTakeScreenshot, 1, CHARP, filename);
+#endif
 mSCRIPT_DECLARE_STRUCT_METHOD(mCore, W(mImage), screenshotToImage, _mScriptCoreTakeScreenshotToImage, 0);
 
 mSCRIPT_DEFINE_STRUCT(mCore)
 	mSCRIPT_DEFINE_CLASS_DOCSTRING(
 		"An instance of an emulator core."
 	)
+#ifdef ENABLE_VFS
 	mSCRIPT_DEFINE_DOCSTRING("Load a ROM file into the current state of this core")
 	mSCRIPT_DEFINE_STRUCT_METHOD(mCore, loadFile)
 	mSCRIPT_DEFINE_DOCSTRING("Load the save data associated with the currently loaded ROM file")
 	mSCRIPT_DEFINE_STRUCT_METHOD(mCore, autoloadSave)
 	mSCRIPT_DEFINE_DOCSTRING("Load save data from the given path. If the `temporary` flag is set, the given save data will not be written back to disk")
 	mSCRIPT_DEFINE_STRUCT_METHOD(mCore, loadSaveFile)
+#endif
 
 	mSCRIPT_DEFINE_DOCSTRING("Get which platform is being emulated. See C.PLATFORM for possible values")
 	mSCRIPT_DEFINE_STRUCT_METHOD(mCore, platform)
@@ -604,21 +615,23 @@ mSCRIPT_DEFINE_STRUCT(mCore)
 	mSCRIPT_DEFINE_DOCSTRING("Write the value of the register with the given name")
 	mSCRIPT_DEFINE_STRUCT_METHOD(mCore, writeRegister)
 
-	mSCRIPT_DEFINE_DOCSTRING("Save state to the slot number. See C.SAVESTATE for possible values for `flags`")
-	mSCRIPT_DEFINE_STRUCT_METHOD(mCore, saveStateSlot)
 	mSCRIPT_DEFINE_DOCSTRING("Save state and return as a buffer. See C.SAVESTATE for possible values for `flags`")
 	mSCRIPT_DEFINE_STRUCT_METHOD(mCore, saveStateBuffer)
+	mSCRIPT_DEFINE_DOCSTRING("Load state from a buffer. See C.SAVESTATE for possible values for `flags`")
+	mSCRIPT_DEFINE_STRUCT_METHOD(mCore, loadStateBuffer)
+#ifdef ENABLE_VFS
+	mSCRIPT_DEFINE_DOCSTRING("Save state to the slot number. See C.SAVESTATE for possible values for `flags`")
+	mSCRIPT_DEFINE_STRUCT_METHOD(mCore, saveStateSlot)
 	mSCRIPT_DEFINE_DOCSTRING("Save state to the given path. See C.SAVESTATE for possible values for `flags`")
 	mSCRIPT_DEFINE_STRUCT_METHOD(mCore, saveStateFile)
 	mSCRIPT_DEFINE_DOCSTRING("Load state from the slot number. See C.SAVESTATE for possible values for `flags`")
 	mSCRIPT_DEFINE_STRUCT_METHOD(mCore, loadStateSlot)
-	mSCRIPT_DEFINE_DOCSTRING("Load state from a buffer. See C.SAVESTATE for possible values for `flags`")
-	mSCRIPT_DEFINE_STRUCT_METHOD(mCore, loadStateBuffer)
 	mSCRIPT_DEFINE_DOCSTRING("Load state from the given path. See C.SAVESTATE for possible values for `flags`")
 	mSCRIPT_DEFINE_STRUCT_METHOD(mCore, loadStateFile)
 
 	mSCRIPT_DEFINE_DOCSTRING("Save a screenshot to a file")
 	mSCRIPT_DEFINE_STRUCT_METHOD(mCore, screenshot)
+#endif
 	mSCRIPT_DEFINE_DOCSTRING("Get a screenshot in an struct::mImage")
 	mSCRIPT_DEFINE_STRUCT_METHOD(mCore, screenshotToImage)
 mSCRIPT_DEFINE_END;
@@ -701,7 +714,7 @@ static void _rebuildMemoryMap(struct mScriptContext* context, struct mScriptCore
 	}
 }
 
-#ifdef USE_DEBUGGERS
+#ifdef ENABLE_DEBUGGERS
 static void _freeBreakpoint(void* bp) {
 	struct mScriptBreakpoint* point = bp;
 	HashTableDeinit(&point->callbacks);
@@ -779,6 +792,7 @@ static void _scriptDebuggerInit(struct mDebuggerModule* debugger) {
 	struct mScriptDebugger* scriptDebugger = (struct mScriptDebugger*) debugger;
 	debugger->isPaused = false;
 	debugger->needsCallback = false;
+	scriptDebugger->reentered = false;
 
 	HashTableInit(&scriptDebugger->breakpoints, 0, _freeBreakpoint);
 	HashTableInit(&scriptDebugger->cbidMap, 0, NULL);
@@ -812,6 +826,11 @@ static void _scriptDebuggerEntered(struct mDebuggerModule* debugger, enum mDebug
 	default:
 		return;
 	}
+
+	if (scriptDebugger->reentered) {
+		return;
+	}
+
 	_runCallbacks(scriptDebugger, point);
 	debugger->isPaused = false;
 }
@@ -929,7 +948,7 @@ static bool _mScriptCoreAdapterClearBreakpoint(struct mScriptCoreAdapter* adapte
 static void _mScriptCoreAdapterDeinit(struct mScriptCoreAdapter* adapter) {
 	_clearMemoryMap(adapter->context, adapter, false);
 	adapter->memory.type->free(&adapter->memory);
-#ifdef USE_DEBUGGERS
+#ifdef ENABLE_DEBUGGERS
 	if (adapter->core->debugger) {
 		mDebuggerDetachModule(adapter->core->debugger, &adapter->debugger.d);
 	}
@@ -976,18 +995,105 @@ static void _mScriptCoreAdapterSetLuminanceCb(struct mScriptCoreAdapter* adapter
 	adapter->luminanceCb = callback;
 }
 
+static uint32_t _mScriptCoreAdapterRead8(struct mScriptCoreAdapter* adapter, uint32_t address) {
+#ifdef ENABLE_DEBUGGERS
+	adapter->debugger.reentered = true;
+#endif
+	uint32_t value = adapter->core->busRead8(adapter->core, address);
+#ifdef ENABLE_DEBUGGERS
+	adapter->debugger.reentered = false;
+#endif
+	return value;
+}
+
+static uint32_t _mScriptCoreAdapterRead16(struct mScriptCoreAdapter* adapter, uint32_t address) {
+#ifdef ENABLE_DEBUGGERS
+	adapter->debugger.reentered = true;
+#endif
+	uint32_t value = adapter->core->busRead16(adapter->core, address);
+#ifdef ENABLE_DEBUGGERS
+	adapter->debugger.reentered = false;
+#endif
+	return value;
+}
+
+static uint32_t _mScriptCoreAdapterRead32(struct mScriptCoreAdapter* adapter, uint32_t address) {
+#ifdef ENABLE_DEBUGGERS
+	adapter->debugger.reentered = true;
+#endif
+	uint32_t value = adapter->core->busRead32(adapter->core, address);
+#ifdef ENABLE_DEBUGGERS
+	adapter->debugger.reentered = false;
+#endif
+	return value;
+}
+
+static struct mScriptValue* _mScriptCoreAdapterReadRange(struct mScriptCoreAdapter* adapter, uint32_t address, uint32_t length) {
+#ifdef ENABLE_DEBUGGERS
+	adapter->debugger.reentered = true;
+#endif
+	struct mScriptValue* value = mScriptStringCreateEmpty(length);
+	char* buffer = value->value.string->buffer;
+	uint32_t i;
+	for (i = 0; i < length; ++i, ++address) {
+		buffer[i] = adapter->core->busRead8(adapter->core, address);
+	}
+#ifdef ENABLE_DEBUGGERS
+	adapter->debugger.reentered = false;
+#endif
+	return value;
+}
+
+static void _mScriptCoreAdapterWrite8(struct mScriptCoreAdapter* adapter, uint32_t address, uint8_t value) {
+#ifdef ENABLE_DEBUGGERS
+	adapter->debugger.reentered = true;
+#endif
+	adapter->core->busWrite8(adapter->core, address, value);
+#ifdef ENABLE_DEBUGGERS
+	adapter->debugger.reentered = false;
+#endif
+}
+
+static void _mScriptCoreAdapterWrite16(struct mScriptCoreAdapter* adapter, uint32_t address, uint16_t value) {
+#ifdef ENABLE_DEBUGGERS
+	adapter->debugger.reentered = true;
+#endif
+	adapter->core->busWrite16(adapter->core, address, value);
+#ifdef ENABLE_DEBUGGERS
+	adapter->debugger.reentered = false;
+#endif
+}
+
+static void _mScriptCoreAdapterWrite32(struct mScriptCoreAdapter* adapter, uint32_t address, uint32_t value) {
+#ifdef ENABLE_DEBUGGERS
+	adapter->debugger.reentered = true;
+#endif
+	adapter->core->busWrite32(adapter->core, address, value);
+#ifdef ENABLE_DEBUGGERS
+	adapter->debugger.reentered = false;
+#endif
+}
+
 mSCRIPT_DECLARE_STRUCT(mScriptCoreAdapter);
 mSCRIPT_DECLARE_STRUCT_METHOD(mScriptCoreAdapter, W(mCore), _get, _mScriptCoreAdapterGet, 1, CHARP, name);
 mSCRIPT_DECLARE_STRUCT_VOID_METHOD(mScriptCoreAdapter, _deinit, _mScriptCoreAdapterDeinit, 0);
 mSCRIPT_DECLARE_STRUCT_VOID_METHOD(mScriptCoreAdapter, reset, _mScriptCoreAdapterReset, 0);
 mSCRIPT_DECLARE_STRUCT_METHOD(mScriptCoreAdapter, WTABLE, setRotationCallbacks, _mScriptCoreAdapterSetRotationCbTable, 1, WTABLE, cbTable);
 mSCRIPT_DECLARE_STRUCT_VOID_METHOD(mScriptCoreAdapter, setSolarSensorCallback, _mScriptCoreAdapterSetLuminanceCb, 1, WRAPPER, callback);
-#ifdef USE_DEBUGGERS
+
+mSCRIPT_DECLARE_STRUCT_METHOD(mScriptCoreAdapter, U32, read8, _mScriptCoreAdapterRead8, 1, U32, address);
+mSCRIPT_DECLARE_STRUCT_METHOD(mScriptCoreAdapter, U32, read16, _mScriptCoreAdapterRead16, 1, U32, address);
+mSCRIPT_DECLARE_STRUCT_METHOD(mScriptCoreAdapter, U32, read32, _mScriptCoreAdapterRead32, 1, U32, address);
+mSCRIPT_DECLARE_STRUCT_METHOD(mScriptCoreAdapter, WSTR, readRange, _mScriptCoreAdapterReadRange, 2, U32, address, U32, length);
+mSCRIPT_DECLARE_STRUCT_VOID_METHOD(mScriptCoreAdapter, write8, _mScriptCoreAdapterWrite8, 2, U32, address, U8, value);
+mSCRIPT_DECLARE_STRUCT_VOID_METHOD(mScriptCoreAdapter, write16, _mScriptCoreAdapterWrite16, 2, U32, address, U16, value);
+mSCRIPT_DECLARE_STRUCT_VOID_METHOD(mScriptCoreAdapter, write32, _mScriptCoreAdapterWrite32, 2, U32, address, U32, value);
+
+#ifdef ENABLE_DEBUGGERS
 mSCRIPT_DECLARE_STRUCT_METHOD_WITH_DEFAULTS(mScriptCoreAdapter, S64, setBreakpoint, _mScriptCoreAdapterSetBreakpoint, 3, WRAPPER, callback, U32, address, S32, segment);
 mSCRIPT_DECLARE_STRUCT_METHOD_WITH_DEFAULTS(mScriptCoreAdapter, S64, setWatchpoint, _mScriptCoreAdapterSetWatchpoint, 4, WRAPPER, callback, U32, address, S32, type, S32, segment);
 mSCRIPT_DECLARE_STRUCT_METHOD_WITH_DEFAULTS(mScriptCoreAdapter, S64, setRangeWatchpoint, _mScriptCoreAdapterSetRangeWatchpoint, 5, WRAPPER, callback, U32, minAddress, U32, maxAddress, S32, type, S32, segment);
 mSCRIPT_DECLARE_STRUCT_METHOD(mScriptCoreAdapter, BOOL, clearBreakpoint, _mScriptCoreAdapterClearBreakpoint, 1, S64, cbid);
-#endif
 
 mSCRIPT_DEFINE_STRUCT_BINDING_DEFAULTS(mScriptCoreAdapter, setBreakpoint)
 	mSCRIPT_NO_DEFAULT,
@@ -1009,6 +1115,7 @@ mSCRIPT_DEFINE_STRUCT_BINDING_DEFAULTS(mScriptCoreAdapter, setRangeWatchpoint)
 	mSCRIPT_NO_DEFAULT,
 	mSCRIPT_S32(-1)
 mSCRIPT_DEFINE_DEFAULTS_END;
+#endif
 
 mSCRIPT_DEFINE_STRUCT(mScriptCoreAdapter)
 	mSCRIPT_DEFINE_CLASS_DOCSTRING(
@@ -1040,7 +1147,14 @@ mSCRIPT_DEFINE_STRUCT(mScriptCoreAdapter)
 		"Note that the full range of values is not used by games, and the exact range depends on the calibration done by the game itself."
 	)
 	mSCRIPT_DEFINE_STRUCT_METHOD(mScriptCoreAdapter, setSolarSensorCallback)
-#ifdef USE_DEBUGGERS
+	mSCRIPT_DEFINE_STRUCT_METHOD(mScriptCoreAdapter, read8)
+	mSCRIPT_DEFINE_STRUCT_METHOD(mScriptCoreAdapter, read16)
+	mSCRIPT_DEFINE_STRUCT_METHOD(mScriptCoreAdapter, read32)
+	mSCRIPT_DEFINE_STRUCT_METHOD(mScriptCoreAdapter, readRange)
+	mSCRIPT_DEFINE_STRUCT_METHOD(mScriptCoreAdapter, write8)
+	mSCRIPT_DEFINE_STRUCT_METHOD(mScriptCoreAdapter, write16)
+	mSCRIPT_DEFINE_STRUCT_METHOD(mScriptCoreAdapter, write32)
+#ifdef ENABLE_DEBUGGERS
 	mSCRIPT_DEFINE_DOCSTRING("Set a breakpoint at a given address")
 	mSCRIPT_DEFINE_STRUCT_METHOD(mScriptCoreAdapter, setBreakpoint)
 	mSCRIPT_DEFINE_DOCSTRING("Clear a breakpoint or watchpoint for a given id returned by a previous call")

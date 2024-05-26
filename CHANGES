@@ -1,5 +1,6 @@
 0.11.0: (Future)
 Features:
+ - New option to lock the maximum frame size
  - Scripting: New `input` API for getting raw keyboard/mouse/controller state
  - Scripting: New `storage` API for saving data for a script, e.g. settings
  - Scripting: Debugger integration to allow for breakpoints and watchpoints
@@ -11,7 +12,7 @@ Emulation fixes:
  - GB Serialize: Add missing Pocket Cam state to savestates
  - GB Video: Implement DMG-style sprite ordering
  - GBA: Unhandled bkpt should be treated as an undefined exception
- - GBA GPIO: Fix tilt scale and orientation (fixes mgba.io/i/2703)
+ - GBA GPIO: Fix gyro read-out start (fixes mgba.io/i/3141)
  - GBA I/O: Fix HALTCNT access behavior (fixes mgba.io/i/2309)
  - GBA SIO: Fix MULTI mode SIOCNT bit 7 writes on secondary GBAs (fixes mgba.io/i/3110)
  - GBA Video: Disable BG target 1 blending when OBJ blending (fixes mgba.io/i/2722)
@@ -19,13 +20,19 @@ Other fixes:
  - Core: Fix inconsistencies with setting game-specific overrides (fixes mgba.io/i/2963)
  - Debugger: Fix writing to specific segment in command-line debugger
  - GB: Fix uninitialized save data when loading undersized temporary saves
+ - GBA Memory: Let raw access read high MMIO addresses
  - Qt: Fix savestate preview sizes with different scales (fixes mgba.io/i/2560)
+ - Qt: Fix potential crash when configuring shortcuts
+ - Qt: Fix crash when applying changes to GB I/O registers in I/O view
+ - Qt: Fix LCDC background priority/enable bit being mis-mapped in I/O view
  - Updater: Fix updating appimage across filesystems
 Misc:
  - Core: Handle relative paths for saves, screenshots, etc consistently (fixes mgba.io/i/2826)
  - GB: Prevent incompatible BIOSes from being used on differing models
  - GB Serialize: Add missing savestate support for MBC6 and NT (newer)
  - GBA: Improve detection of valid ELF ROMs
+ - GBA Audio: Remove broken XQ audio pending rewrite
+ - Libretro: Add Super Game Boy Color support (closes mgba.io/i/3188)
  - mGUI: Enable auto-softpatching (closes mgba.io/i/2899)
  - mGUI: Persist fast forwarding after closing menu (fixes mgba.io/i/2414)
  - Qt: Handle multiple save game files for disparate games separately (fixes mgba.io/i/2887)

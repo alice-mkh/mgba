@@ -14,7 +14,6 @@
 #include <mgba/internal/gba/gba.h>
 #include <mgba/internal/gba/io.h>
 #include <mgba/internal/gba/debugger/cli.h>
-#include <mgba/internal/gba/extra/audio-mixer.h>
 #include <mgba/internal/gba/overrides.h>
 #ifndef DISABLE_THREADING
 #include <mgba/feature/thread-proxy.h>
@@ -191,7 +190,6 @@ static const struct mCoreRegisterInfo _GBARegisters[] = {
 
 struct mVideoLogContext;
 
-#define CPU_COMPONENT_AUDIO_MIXER CPU_COMPONENT_MISC_1
 #define LOGO_CRC32 0xD0BEB55E
 
 struct GBACore {
@@ -216,7 +214,6 @@ struct GBACore {
 	bool hasOverride;
 	struct mDebuggerPlatform* debuggerPlatform;
 	struct mCheatDevice* cheatDevice;
-	struct GBAAudioMixer* audioMixer;
 	struct mCoreMemoryBlock memoryBlocks[12];
 	size_t nMemoryBlocks;
 	int memoryBlockType;
@@ -269,7 +266,6 @@ static bool _GBACoreInit(struct mCore* core) {
 #ifndef MINIMAL_CORE
 	gbacore->logContext = NULL;
 #endif
-	gbacore->audioMixer = NULL;
 
 	GBACreate(gba);
 	// TODO: Restore cheats
@@ -298,7 +294,7 @@ static bool _GBACoreInit(struct mCore* core) {
 	gbacore->proxyRenderer.logger = NULL;
 #endif
 
-#if !defined(MINIMAL_CORE) || MINIMAL_CORE < 2
+#ifdef ENABLE_VFS
 	mDirectorySetInit(&core->dirs);
 #endif
 
@@ -310,10 +306,10 @@ static void _GBACoreDeinit(struct mCore* core) {
 	GBADestroy(core->board);
 	mappedMemoryFree(core->cpu, sizeof(struct ARMCore));
 	mappedMemoryFree(core->board, sizeof(struct GBA));
-#if !defined(MINIMAL_CORE) || MINIMAL_CORE < 2
+#ifdef ENABLE_VFS
 	mDirectorySetDeinit(&core->dirs);
 #endif
-#ifdef USE_DEBUGGERS
+#ifdef ENABLE_DEBUGGERS
 	if (core->symbolTable) {
 		mDebuggerSymbolTableDestroy(core->symbolTable);
 	}
@@ -324,7 +320,6 @@ static void _GBACoreDeinit(struct mCore* core) {
 	if (gbacore->cheatDevice) {
 		mCheatDeviceDestroy(gbacore->cheatDevice);
 	}
-	free(gbacore->audioMixer);
 	mCoreConfigFreeOpts(&core->opts);
 	free(core);
 }
@@ -374,7 +369,7 @@ static void _GBACoreLoadConfig(struct mCore* core, const struct mCoreConfig* con
 		} else if (strcasecmp(idleOptimization, "remove") == 0) {
 			gba->idleOptimization = IDLE_LOOP_REMOVE;
 		} else if (strcasecmp(idleOptimization, "detect") == 0) {
-			if (gba->idleLoop == IDLE_LOOP_NONE) {
+			if (gba->idleLoop == GBA_IDLE_LOOP_NONE) {
 				gba->idleOptimization = IDLE_LOOP_DETECT;
 			} else {
 				gba->idleOptimization = IDLE_LOOP_REMOVE;
@@ -387,7 +382,6 @@ static void _GBACoreLoadConfig(struct mCore* core, const struct mCoreConfig* con
 	mCoreConfigCopyValue(&core->config, config, "allowOpposingDirections");
 	mCoreConfigCopyValue(&core->config, config, "gba.bios");
 	mCoreConfigCopyValue(&core->config, config, "gba.forceGbp");
-	mCoreConfigCopyValue(&core->config, config, "gba.audioHle");
 	mCoreConfigCopyValue(&core->config, config, "vbaBugCompat");
 
 #ifndef DISABLE_THREADING
@@ -559,16 +553,14 @@ static void _GBACorePutPixels(struct mCore* core, const void* buffer, size_t str
 	gba->video.renderer->putPixels(gba->video.renderer, stride, buffer);
 }
 
-static struct blip_t* _GBACoreGetAudioChannel(struct mCore* core, int ch) {
+static unsigned _GBACoreAudioSampleRate(const struct mCore* core) {
 	struct GBA* gba = core->board;
-	switch (ch) {
-	case 0:
-		return gba->audio.psg.left;
-	case 1:
-		return gba->audio.psg.right;
-	default:
-		return NULL;
-	}
+	return GBA_ARM7TDMI_FREQUENCY / gba->audio.sampleInterval;
+}
+
+static struct mAudioBuffer* _GBACoreGetAudioBuffer(struct mCore* core) {
+	struct GBA* gba = core->board;
+	return &gba->audio.psg.buffer;
 }
 
 static void _GBACoreSetAudioBufferSize(struct mCore* core, size_t samples) {
@@ -729,16 +721,6 @@ static void _GBACoreReset(struct mCore* core) {
 		}
 	}
 
-#ifndef MINIMAL_CORE
-	int useAudioMixer;
-	if (!gbacore->audioMixer && mCoreConfigGetIntValue(&core->config, "gba.audioHle", &useAudioMixer) && useAudioMixer) {
-		gbacore->audioMixer = malloc(sizeof(*gbacore->audioMixer));
-		GBAAudioMixerCreate(gbacore->audioMixer);
-		((struct ARMCore*) core->cpu)->components[CPU_COMPONENT_AUDIO_MIXER] = &gbacore->audioMixer->d;
-		ARMHotplugAttach(core->cpu, CPU_COMPONENT_AUDIO_MIXER);
-	}
-#endif
-
 	bool forceGbp = false;
 	bool vbaBugCompat = true;
 	mCoreConfigGetBoolValue(&core->config, "gba.forceGbp", &forceGbp);
@@ -759,7 +741,7 @@ static void _GBACoreReset(struct mCore* core) {
 	}
 	gbacore->memoryBlockType = -2;
 
-#if !defined(MINIMAL_CORE) || MINIMAL_CORE < 2
+#ifdef ENABLE_VFS
 	if (!gba->biosVf && core->opts.useBios) {
 		struct VFile* bios = NULL;
 		bool found = false;
@@ -909,8 +891,8 @@ static void _GBACoreSetPeripheral(struct mCore* core, int type, void* periph) {
 		gba->luminanceSource = periph;
 		break;
 	case mPERIPH_GBA_BATTLECHIP_GATE:
-		GBASIOSetDriver(&gba->sio, periph, SIO_MULTI);
-		GBASIOSetDriver(&gba->sio, periph, SIO_NORMAL_32);
+		GBASIOSetDriver(&gba->sio, periph, GBA_SIO_MULTI);
+		GBASIOSetDriver(&gba->sio, periph, GBA_SIO_NORMAL_32);
 		break;
 	default:
 		return;
@@ -1004,27 +986,27 @@ size_t _GBACoreListMemoryBlocks(const struct mCore* core, const struct mCoreMemo
 
 	if (gbacore->memoryBlockType != gba->memory.savedata.type) {
 		switch (gba->memory.savedata.type) {
-		case SAVEDATA_SRAM:
+		case GBA_SAVEDATA_SRAM:
 			memcpy(gbacore->memoryBlocks, _GBAMemoryBlocksSRAM, sizeof(_GBAMemoryBlocksSRAM));
 			gbacore->nMemoryBlocks = sizeof(_GBAMemoryBlocksSRAM) / sizeof(*_GBAMemoryBlocksSRAM);
 			break;
-		case SAVEDATA_SRAM512:
+		case GBA_SAVEDATA_SRAM512:
 			memcpy(gbacore->memoryBlocks, _GBAMemoryBlocksSRAM512, sizeof(_GBAMemoryBlocksSRAM512));
 			gbacore->nMemoryBlocks = sizeof(_GBAMemoryBlocksSRAM512) / sizeof(*_GBAMemoryBlocksSRAM512);
 			break;
-		case SAVEDATA_FLASH512:
+		case GBA_SAVEDATA_FLASH512:
 			memcpy(gbacore->memoryBlocks, _GBAMemoryBlocksFlash512, sizeof(_GBAMemoryBlocksFlash512));
 			gbacore->nMemoryBlocks = sizeof(_GBAMemoryBlocksFlash512) / sizeof(*_GBAMemoryBlocksFlash512);
 			break;
-		case SAVEDATA_FLASH1M:
+		case GBA_SAVEDATA_FLASH1M:
 			memcpy(gbacore->memoryBlocks, _GBAMemoryBlocksFlash1M, sizeof(_GBAMemoryBlocksFlash1M));
 			gbacore->nMemoryBlocks = sizeof(_GBAMemoryBlocksFlash1M) / sizeof(*_GBAMemoryBlocksFlash1M);
 			break;
-		case SAVEDATA_EEPROM:
+		case GBA_SAVEDATA_EEPROM:
 			memcpy(gbacore->memoryBlocks, _GBAMemoryBlocksEEPROM, sizeof(_GBAMemoryBlocksEEPROM));
 			gbacore->nMemoryBlocks = sizeof(_GBAMemoryBlocksEEPROM) / sizeof(*_GBAMemoryBlocksEEPROM);
 			break;
-		case SAVEDATA_EEPROM512:
+		case GBA_SAVEDATA_EEPROM512:
 			memcpy(gbacore->memoryBlocks, _GBAMemoryBlocksEEPROM512, sizeof(_GBAMemoryBlocksEEPROM512));
 			gbacore->nMemoryBlocks = sizeof(_GBAMemoryBlocksEEPROM512) / sizeof(*_GBAMemoryBlocksEEPROM512);
 			break;
@@ -1076,7 +1058,7 @@ void* _GBACoreGetMemoryBlock(struct mCore* core, size_t id, size_t* sizeOut) {
 		*sizeOut = gba->memory.romSize;
 		return gba->memory.rom;
 	case GBA_REGION_SRAM:
-		if (gba->memory.savedata.type == SAVEDATA_FLASH1M) {
+		if (gba->memory.savedata.type == GBA_SAVEDATA_FLASH1M) {
 			*sizeOut = GBA_SIZE_FLASH1M;
 			return gba->memory.savedata.currentBank;
 		}
@@ -1218,7 +1200,7 @@ static bool _GBACoreWriteRegister(struct mCore* core, const char* name, const vo
 	return true;
 }
 
-#ifdef USE_DEBUGGERS
+#ifdef ENABLE_DEBUGGERS
 static bool _GBACoreSupportsDebuggerType(struct mCore* core, enum mDebuggerType type) {
 	UNUSED(core);
 	switch (type) {
@@ -1262,7 +1244,7 @@ static void _GBACoreDetachDebugger(struct mCore* core) {
 static void _GBACoreLoadSymbols(struct mCore* core, struct VFile* vf) {
 	bool closeAfter = false;
 	core->symbolTable = mDebuggerSymbolTableCreate();
-#if !defined(MINIMAL_CORE) || MINIMAL_CORE < 2
+#ifdef ENABLE_VFS
 #ifdef USE_ELF
 	if (!vf && core->dirs.base) {
 		closeAfter = true;
@@ -1280,7 +1262,7 @@ static void _GBACoreLoadSymbols(struct mCore* core, struct VFile* vf) {
 #ifdef USE_ELF
 	struct ELF* elf = ELFOpen(vf);
 	if (elf) {
-#ifdef USE_DEBUGGERS
+#ifdef ENABLE_DEBUGGERS
 		mCoreLoadELFSymbols(core->symbolTable, elf);
 #endif
 		ELFClose(elf);
@@ -1515,7 +1497,8 @@ struct mCore* GBACoreCreate(void) {
 	core->setVideoGLTex = _GBACoreSetVideoGLTex;
 	core->getPixels = _GBACoreGetPixels;
 	core->putPixels = _GBACorePutPixels;
-	core->getAudioChannel = _GBACoreGetAudioChannel;
+	core->audioSampleRate = _GBACoreAudioSampleRate;
+	core->getAudioBuffer = _GBACoreGetAudioBuffer;
 	core->setAudioBufferSize = _GBACoreSetAudioBufferSize;
 	core->getAudioBufferSize = _GBACoreGetAudioBufferSize;
 	core->addCoreCallbacks = _GBACoreAddCoreCallbacks;
@@ -1565,7 +1548,7 @@ struct mCore* GBACoreCreate(void) {
 	core->listRegisters = _GBACoreListRegisters;
 	core->readRegister = _GBACoreReadRegister;
 	core->writeRegister = _GBACoreWriteRegister;
-#ifdef USE_DEBUGGERS
+#ifdef ENABLE_DEBUGGERS
 	core->supportsDebuggerType = _GBACoreSupportsDebuggerType;
 	core->debuggerPlatform = _GBACoreDebuggerPlatform;
 	core->cliDebuggerSystem = _GBACoreCliDebuggerSystem;

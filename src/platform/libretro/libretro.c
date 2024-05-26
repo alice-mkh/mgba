@@ -7,7 +7,6 @@
 
 #include <mgba-util/common.h>
 
-#include <mgba/core/blip_buf.h>
 #include <mgba/core/cheats.h>
 #include <mgba/core/core.h>
 #include <mgba/core/log.h>
@@ -30,7 +29,6 @@
 #include "libretro_core_options.h"
 
 #define GB_SAMPLES 512
-#define SAMPLE_RATE 32768
 /* An alpha factor of 1/180 is *somewhat* equivalent
  * to calculating the average for the last 180
  * frames, or 3 seconds of runtime... */
@@ -54,7 +52,8 @@ static retro_set_sensor_state_t sensorStateCallback;
 
 static void GBARetroLog(struct mLogger* logger, int category, enum mLogLevel level, const char* format, va_list args);
 
-static void _postAudioBuffer(struct mAVStream*, blip_t* left, blip_t* right);
+static void _postAudioBuffer(struct mAVStream*, struct mAudioBuffer*);
+static void _audioRateChanged(struct mAVStream*, unsigned rate);
 static void _setRumble(struct mRumble* rumble, int enable);
 static uint8_t _readLux(struct GBALuminanceSource* lux);
 static void _updateLux(struct GBALuminanceSource* lux);
@@ -270,6 +269,8 @@ static void _reloadSettings(void) {
 			model = GB_MODEL_SGB;
 		} else if (strcmp(var.value, "Game Boy Color") == 0) {
 			model = GB_MODEL_CGB;
+		} else if (strcmp(var.value, "Super Game Boy Color") == 0) {
+			model = GB_MODEL_SCGB;
 		} else if (strcmp(var.value, "Game Boy Advance") == 0) {
 			model = GB_MODEL_AGB;
 		} else {
@@ -280,6 +281,8 @@ static void _reloadSettings(void) {
 		mCoreConfigSetDefaultValue(&core->config, "gb.model", modelName);
 		mCoreConfigSetDefaultValue(&core->config, "sgb.model", modelName);
 		mCoreConfigSetDefaultValue(&core->config, "cgb.model", modelName);
+		mCoreConfigSetDefaultValue(&core->config, "cgb.hybridModel", modelName);
+		mCoreConfigSetDefaultValue(&core->config, "cgb.sgbModel", modelName);
 	}
 
 	var.key = "mgba_sgb_borders";
@@ -424,7 +427,7 @@ void retro_get_system_av_info(struct retro_system_av_info* info) {
 
 	info->geometry.aspect_ratio = width / (double) height;
 	info->timing.fps = core->frequency(core) / (float) core->frameCycles(core);
-	info->timing.sample_rate = SAMPLE_RATE;
+	info->timing.sample_rate = core->audioSampleRate(core);
 }
 
 void retro_init(void) {
@@ -496,10 +499,11 @@ void retro_init(void) {
 	logger.log = GBARetroLog;
 	mLogSetDefaultLogger(&logger);
 
-	stream.videoDimensionsChanged = 0;
-	stream.postAudioFrame = 0;
-	stream.postAudioBuffer = _postAudioBuffer;
-	stream.postVideoFrame = 0;
+	stream.videoDimensionsChanged = NULL;
+	stream.postAudioFrame = NULL;
+	stream.postAudioBuffer = NULL;
+	stream.postVideoFrame = NULL;
+	stream.audioRateChanged = _audioRateChanged;
 
 	imageSource.startRequestImage = _startImage;
 	imageSource.stopRequestImage = _stopImage;
@@ -613,9 +617,8 @@ void retro_run(void) {
 
 #ifdef M_CORE_GBA
 	if (core->platform(core) == mPLATFORM_GBA) {
-		blip_t *audioChannelLeft  = core->getAudioChannel(core, 0);
-		blip_t *audioChannelRight = core->getAudioChannel(core, 1);
-		int samplesAvail          = blip_samples_avail(audioChannelLeft);
+		struct mAudioBuffer *buffer = core->getAudioBuffer(core);
+		int samplesAvail            = mAudioBufferAvailable(buffer);
 		if (samplesAvail > 0) {
 			/* Update 'running average' of number of
 			 * samples per frame.
@@ -632,8 +635,7 @@ void retro_run(void) {
 				audioSampleBufferSize = (samplesToRead * 2);
 				audioSampleBuffer     = realloc(audioSampleBuffer, audioSampleBufferSize * sizeof(int16_t));
 			}
-			int produced = blip_read_samples(audioChannelLeft, audioSampleBuffer, samplesToRead, true);
-			blip_read_samples(audioChannelRight, audioSampleBuffer + 1, samplesToRead, true);
+			int produced = mAudioBufferRead(buffer, audioSampleBuffer, samplesToRead);
 			if (produced > 0) {
 				if (audioLowPassEnabled) {
 					_audioLowPassFilter(audioSampleBuffer, produced);
@@ -742,7 +744,7 @@ static void _setupMaps(struct mCore* core) {
 #ifdef M_CORE_GB
 	if (core->platform(core) == mPLATFORM_GB) {
 		struct GB* gb = core->board;
-		struct retro_memory_descriptor descs[11];
+		struct retro_memory_descriptor descs[12];
 		struct retro_memory_map mmaps;
 
 		memset(descs, 0, sizeof(descs));
@@ -812,8 +814,16 @@ static void _setupMaps(struct mCore* core) {
 		if (savedataSize) {
 			descs[i].ptr    = savedata;
 			descs[i].start  = GB_BASE_EXTERNAL_RAM;
-			descs[i].len    = savedataSize;
+			descs[i].len    = savedataSize < GB_SIZE_EXTERNAL_RAM ? savedataSize : GB_SIZE_EXTERNAL_RAM;
 			i++;
+
+			if ((savedataSize & ~0xFF) > GB_SIZE_EXTERNAL_RAM) {
+				descs[i].ptr    = savedata;
+				descs[i].offset = GB_SIZE_EXTERNAL_RAM;
+				descs[i].start  = 0x16000;
+				descs[i].len    = savedataSize - GB_SIZE_EXTERNAL_RAM;
+				i++;
+			}
 		}
 
 		if (gb->model >= GB_MODEL_CGB) {
@@ -823,7 +833,6 @@ static void _setupMaps(struct mCore* core) {
 			descs[i].ptr    = gb->memory.wram + 0x2000;
 			descs[i].start  = 0x10000;
 			descs[i].len    = GB_SIZE_WORKING_RAM - 0x2000;
-			descs[i].select = 0xFFFFA000;
 			i++;
 		}
 
@@ -852,9 +861,11 @@ bool retro_load_game(const struct retro_game_info* game) {
 		dataSize = game->size;
 		memcpy(data, game->data, game->size);
 		rom = VFileFromMemory(data, game->size);
+#ifdef ENABLE_VFS
 	} else {
-		data = 0;
+		data = NULL;
 		rom = VFileOpen(game->path, O_RDONLY);
+#endif
 	}
 	if (!rom) {
 		return false;
@@ -884,9 +895,9 @@ bool retro_load_game(const struct retro_game_info* game) {
 		 * to nominal number of samples per frame.
 		 * Buffer will be resized as required in
 		 * retro_run(). */
-		size_t audioSamplesPerFrame = (size_t)((float) SAMPLE_RATE * (float) core->frameCycles(core) /
+		size_t audioSamplesPerFrame = (size_t)((float) core->audioSampleRate(core) * (float) core->frameCycles(core) /
 			(float)core->frequency(core));
-		audioSampleBufferSize  = audioSamplesPerFrame * 2;
+		audioSampleBufferSize  = ceil(audioSamplesPerFrame) * 2;
 		audioSampleBuffer = malloc(audioSampleBufferSize * sizeof(int16_t));
 		audioSamplesPerFrameAvg = (float) audioSamplesPerFrame;
 		/* Internal audio buffer size should be
@@ -911,16 +922,14 @@ bool retro_load_game(const struct retro_game_info* game) {
 		 * using the regular stream-set _postAudioBuffer()
 		 * callback with a fixed buffer size, which seems
 		 * (historically) to produce adequate results */
-		core->setAVStream(core, &stream);
+		stream.postAudioBuffer = _postAudioBuffer;
 		audioSampleBufferSize = GB_SAMPLES * 2;
 		audioSampleBuffer = malloc(audioSampleBufferSize * sizeof(int16_t));
 		audioSamplesPerFrameAvg = GB_SAMPLES;
 		core->setAudioBufferSize(core, GB_SAMPLES);
 	}
 
-	blip_set_rates(core->getAudioChannel(core, 0), core->frequency(core), SAMPLE_RATE);
-	blip_set_rates(core->getAudioChannel(core, 1), core->frequency(core), SAMPLE_RATE);
-
+	core->setAVStream(core, &stream);
 	core->setPeripheral(core, mPERIPH_RUMBLE, &rumble);
 	core->setPeripheral(core, mPERIPH_ROTATION, &rotation);
 
@@ -980,6 +989,7 @@ bool retro_load_game(const struct retro_game_info* game) {
 	}
 #endif
 
+#ifdef ENABLE_VFS
 	if (core->opts.useBios && sysDir && biosName) {
 		snprintf(biosPath, sizeof(biosPath), "%s%s%s", sysDir, PATH_SEP, biosName);
 		struct VFile* bios = VFileOpen(biosPath, O_RDONLY);
@@ -987,6 +997,7 @@ bool retro_load_game(const struct retro_game_info* game) {
 			core->loadBIOS(core, bios, 0);
 		}
 	}
+#endif
 
 	core->reset(core);
 	_setupMaps(core);
@@ -1156,7 +1167,7 @@ size_t retro_get_memory_size(unsigned id) {
 #ifdef M_CORE_GBA
 		case mPLATFORM_GBA:
 			switch (((struct GBA*) core->board)->memory.savedata.type) {
-			case SAVEDATA_AUTODETECT:
+			case GBA_SAVEDATA_AUTODETECT:
 				return GBA_SIZE_FLASH1M;
 			default:
 				return GBASavedataSize(&((struct GBA*) core->board)->memory.savedata);
@@ -1238,16 +1249,22 @@ void GBARetroLog(struct mLogger* logger, int category, enum mLogLevel level, con
 }
 
 /* Used only for GB/GBC content */
-static void _postAudioBuffer(struct mAVStream* stream, blip_t* left, blip_t* right) {
+static void _postAudioBuffer(struct mAVStream* stream, struct mAudioBuffer* buffer) {
 	UNUSED(stream);
-	int produced = blip_read_samples(left, audioSampleBuffer, GB_SAMPLES, true);
-	blip_read_samples(right, audioSampleBuffer + 1, GB_SAMPLES, true);
+	int produced = mAudioBufferRead(buffer, audioSampleBuffer, GB_SAMPLES);
 	if (produced > 0) {
 		if (audioLowPassEnabled) {
 			_audioLowPassFilter(audioSampleBuffer, produced);
 		}
 		audioCallback(audioSampleBuffer, (size_t)produced);
 	}
+}
+
+static void _audioRateChanged(struct mAVStream* stream, unsigned rate) {
+	UNUSED(stream);
+	struct retro_system_av_info info;
+	retro_get_system_av_info(&info);
+	environCallback(RETRO_ENVIRONMENT_SET_SYSTEM_AV_INFO, &info);
 }
 
 static void _setRumble(struct mRumble* rumble, int enable) {
@@ -1390,7 +1407,7 @@ static void _updateRotation(struct mRotationSource* source) {
 		tiltY = sensorGetCallback(0, RETRO_SENSOR_ACCELEROMETER_Y) * 2e8f;
 	}
 	if (gyroEnabled) {
-		gyroZ = sensorGetCallback(0, RETRO_SENSOR_GYROSCOPE_Z) * -1.1e9f;
+		gyroZ = sensorGetCallback(0, RETRO_SENSOR_GYROSCOPE_Z) * -5.5e8f;
 	}
 }
 

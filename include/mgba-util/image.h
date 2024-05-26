@@ -114,12 +114,16 @@ struct VFile;
 struct mImage* mImageCreate(unsigned width, unsigned height, enum mColorFormat format);
 struct mImage* mImageCreateWithStride(unsigned width, unsigned height, unsigned stride, enum mColorFormat format);
 struct mImage* mImageCreateFromConstBuffer(unsigned width, unsigned height, unsigned stride, enum mColorFormat format, const void* pixels);
+#ifdef ENABLE_VFS
 struct mImage* mImageLoad(const char* path);
+#endif
 struct mImage* mImageLoadVF(struct VFile* vf);
 struct mImage* mImageConvertToFormat(const struct mImage*, enum mColorFormat format);
 void mImageDestroy(struct mImage*);
 
+#ifdef ENABLE_VFS
 bool mImageSave(const struct mImage*, const char* path, const char* format);
+#endif
 bool mImageSaveVF(const struct mImage*, struct VFile* vf, const char* format);
 
 uint32_t mImageGetPixel(const struct mImage* image, unsigned x, unsigned y);
@@ -138,6 +142,7 @@ void mPainterInit(struct mPainter*, struct mImage* backing);
 void mPainterDrawRectangle(struct mPainter*, int x, int y, int width, int height);
 void mPainterDrawLine(struct mPainter*, int x1, int y1, int x2, int y2);
 void mPainterDrawCircle(struct mPainter*, int x, int y, int diameter);
+void mPainterDrawMask(struct mPainter*, const struct mImage* mask, int x, int y);
 
 uint32_t mColorConvert(uint32_t color, enum mColorFormat from, enum mColorFormat to);
 uint32_t mImageColorConvert(uint32_t color, const struct mImage* from, enum mColorFormat to);

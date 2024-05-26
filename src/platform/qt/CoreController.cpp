@@ -49,7 +49,7 @@ CoreController::CoreController(mCore* core, QObject* parent)
 	GBASIODolphinCreate(&m_dolphin);
 #endif
 
-#ifdef USE_DEBUGGERS
+#ifdef ENABLE_DEBUGGERS
 	mDebuggerInit(&m_debugger);
 #endif
 
@@ -218,7 +218,7 @@ CoreController::~CoreController() {
 
 	mCoreThreadJoin(&m_threadContext);
 
-#ifdef USE_DEBUGGERS
+#ifdef ENABLE_DEBUGGERS
 	mDebuggerDeinit(&m_debugger);
 #endif
 
@@ -331,7 +331,7 @@ void CoreController::loadConfig(ConfigController* config) {
 #endif
 }
 
-#ifdef USE_DEBUGGERS
+#ifdef ENABLE_DEBUGGERS
 void CoreController::attachDebugger(bool interrupt) {
 	Interrupter interrupter(this);
 	if (!m_threadContext.core->debugger) {
@@ -424,7 +424,7 @@ bool CoreController::attachDolphin(const Address& address) {
 	}
 	if (GBASIODolphinConnect(&m_dolphin, &address, 0, 0)) {
 		GBA* gba = static_cast<GBA*>(m_threadContext.core->board);
-		GBASIOSetDriver(&gba->sio, &m_dolphin.d, SIO_JOYBUS);
+		GBASIOSetDriver(&gba->sio, &m_dolphin.d, GBA_SIO_JOYBUS);
 		return true;
 	}
 	return false;
@@ -433,7 +433,7 @@ bool CoreController::attachDolphin(const Address& address) {
 void CoreController::detachDolphin() {
 	if (platform() == mPLATFORM_GBA) {
 		GBA* gba = static_cast<GBA*>(m_threadContext.core->board);
-		GBASIOSetDriver(&gba->sio, nullptr, SIO_JOYBUS);
+		GBASIOSetDriver(&gba->sio, nullptr, GBA_SIO_JOYBUS);
 	}
 	GBASIODolphinDestroy(&m_dolphin);
 }
@@ -478,7 +478,7 @@ void CoreController::start() {
 
 void CoreController::stop() {
 	setSync(false);
-#ifdef USE_DEBUGGERS
+#ifdef ENABLE_DEBUGGERS
 	detachDebugger();
 #endif
 	setPaused(false);
