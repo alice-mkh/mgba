@@ -132,9 +132,17 @@ mgba_core_load_rom (HsCore      *core,
 
   mCoreLoadSaveFile (self->core, save_path, FALSE);
 
-  refresh_screen_area (self);
-
   return TRUE;
+}
+
+static void
+mgba_core_start (HsCore *core)
+{
+  mGBACore *self = MGBA_CORE (core);
+
+  self->core->reset (self->core);
+
+  refresh_screen_area (self);
 }
 
 static void
@@ -415,6 +423,7 @@ mgba_core_class_init (mGBACoreClass *klass)
   object_class->finalize = mgba_core_finalize;
 
   core_class->load_rom = mgba_core_load_rom;
+  core_class->start = mgba_core_start;
   core_class->reset = mgba_core_reset;
   core_class->stop = mgba_core_stop;
   core_class->poll_input = mgba_core_poll_input;
