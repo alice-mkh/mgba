@@ -40,6 +40,9 @@ static const uint8_t GBA_ROM_MAGIC2[] = { 0x96 };
 static const size_t GBA_MB_MAGIC_OFFSET = 0xC0;
 
 static void GBAInit(void* cpu, struct mCPUComponent* component);
+static void GBACP0Process(struct ARMCore* cpu, int crn, int crm, int crd, int opcode1, int opcode2);
+static int32_t GBACP14Read(struct ARMCore* cpu, int crn, int crm, int opcode1, int opcode2);
+static void GBACP14Write(struct ARMCore* cpu, int crn, int crm, int opcode1, int opcode2, int32_t value);
 static void GBAInterruptHandlerInit(struct ARMInterruptHandler* irqh);
 static void GBAProcessEvents(struct ARMCore* cpu);
 static void GBAHitStub(struct ARMCore* cpu, uint32_t opcode);
@@ -72,6 +75,9 @@ static void GBAInit(void* cpu, struct mCPUComponent* component) {
 	gba->sync = 0;
 
 	GBAInterruptHandlerInit(&gba->cpu->irqh);
+	gba->cpu->cp[0].cdp = GBACP0Process;
+	gba->cpu->cp[14].mrc = GBACP14Read;
+	gba->cpu->cp[14].mcr = GBACP14Write;
 	GBAMemoryInit(gba);
 
 	gba->memory.savedata.timing = &gba->timing;
@@ -186,6 +192,30 @@ void GBADestroy(struct GBA* gba) {
 	mCoreCallbacksListDeinit(&gba->coreCallbacks);
 }
 
+static void GBACP0Process(struct ARMCore* cpu, int crn, int crm, int crd, int opcode1, int opcode2) {
+	UNUSED(cpu);
+	mLOG(GBA, INFO, "Hit Wii U VC opcode: cdp p0, %i, c%i, c%i, c%i, %i", opcode1, crd, crn, crm, opcode2);
+}
+
+static int32_t GBACP14Read(struct ARMCore* cpu, int crn, int crm, int opcode1, int opcode2) {
+	UNUSED(crn);
+	UNUSED(crm);
+	UNUSED(opcode1);
+	UNUSED(opcode2);
+	mLOG(GBA, GAME_ERROR, "Read from missing CP14");
+	return GBALoadBad(cpu);
+}
+
+static void GBACP14Write(struct ARMCore* cpu, int crn, int crm, int opcode1, int opcode2, int32_t value) {
+	UNUSED(cpu);
+	UNUSED(crn);
+	UNUSED(crm);
+	UNUSED(opcode1);
+	UNUSED(opcode2);
+	UNUSED(value);
+	mLOG(GBA, GAME_ERROR, "Write to missing CP14");
+}
+
 void GBAInterruptHandlerInit(struct ARMInterruptHandler* irqh) {
 	irqh->reset = GBAReset;
 	irqh->processEvents = GBAProcessEvents;
@@ -220,6 +250,7 @@ void GBAReset(struct ARMCore* cpu) {
 		gba->memory.romMask = toPow2(gba->memory.romSize) - 1;
 		gba->yankedRomSize = 0;
 	}
+	gba->lastRumble = 0;
 	mTimingClear(&gba->timing);
 	GBAMemoryReset(gba);
 	GBAVideoReset(&gba->video);
@@ -308,11 +339,7 @@ static void GBAProcessEvents(struct ARMCore* cpu) {
 #ifdef ENABLE_DEBUGGERS
 			gba->timing.globalCycles += cycles < nextEvent ? nextEvent : cycles;
 #endif
-#ifndef NDEBUG
-			if (cycles < 0) {
-				mLOG(GBA, FATAL, "Negative cycles passed: %i", cycles);
-			}
-#endif
+			mASSERT_DEBUG_LOG(GBA, cycles >= 0, "Negative cycles passed: %i", cycles);
 			nextEvent = mTimingTick(&gba->timing, cycles < nextEvent ? nextEvent : cycles);
 		} while (gba->cpuBlocked && !gba->earlyExit);
 
@@ -322,12 +349,9 @@ static void GBAProcessEvents(struct ARMCore* cpu) {
 			if (!gba->memory.io[GBA_REG(IME)] || !gba->memory.io[GBA_REG(IE)]) {
 				break;
 			}
+		} else {
+			mASSERT_DEBUG_LOG(GBA, nextEvent >= 0, "Negative cycles will pass: %i", nextEvent);
 		}
-#ifndef NDEBUG
-		else if (nextEvent < 0) {
-			mLOG(GBA, FATAL, "Negative cycles will pass: %i", nextEvent);
-		}
-#endif
 		if (gba->earlyExit) {
 			break;
 		}
@@ -463,7 +487,7 @@ bool GBALoadROM(struct GBA* gba, struct VFile* vf) {
 		gba->cpu->memory.setActiveRegion(gba->cpu, gba->cpu->gprs[ARM_PC]);
 	}
 	GBAHardwareInit(&gba->memory.hw, &((uint16_t*) gba->memory.rom)[GPIO_REG_DATA >> 1]);
-	GBAVFameDetect(&gba->memory.vfame, gba->memory.rom, gba->memory.romSize);
+	GBAVFameDetect(&gba->memory.vfame, gba->memory.rom, gba->memory.romSize, gba->romCrc32);
 	// TODO: error check
 	return true;
 }
@@ -961,6 +985,12 @@ void GBAFrameEnded(struct GBA* gba) {
 
 	if (gba->memory.hw.devices & (HW_GB_PLAYER | HW_GB_PLAYER_DETECTION)) {
 		GBASIOPlayerUpdate(gba);
+	}
+
+	struct mRumble* rumble = gba->rumble;
+	if (rumble && rumble->integrate) {
+		gba->lastRumble = mTimingCurrentTime(&gba->timing);
+		rumble->integrate(rumble, VIDEO_TOTAL_LENGTH);
 	}
 
 	size_t c;

@@ -232,6 +232,9 @@ void GBAAudioWriteSOUNDBIAS(struct GBAAudio* audio, uint16_t value) {
 	if (oldSampleInterval != audio->sampleInterval) {
 		timestamp -= audio->lastSample;
 		audio->sampleIndex = timestamp >> (9 - GBARegisterSOUNDBIASGetResolution(value));
+		if (audio->sampleIndex >= GBA_MAX_SAMPLES) {
+			audio->sampleIndex = 0;
+		}
 		if (audio->p->stream && audio->p->stream->audioRateChanged) {
 			audio->p->stream->audioRateChanged(audio->p->stream, GBA_ARM7TDMI_FREQUENCY / audio->sampleInterval);
 		}
@@ -321,6 +324,9 @@ void GBAAudioSampleFIFO(struct GBAAudio* audio, int fifoId, int32_t cycles) {
 	int bits = 2 << GBARegisterSOUNDBIASGetResolution(audio->soundbias);
 	until += 1 << (9 - GBARegisterSOUNDBIASGetResolution(audio->soundbias));
 	until >>= 9 - GBARegisterSOUNDBIASGetResolution(audio->soundbias);
+	if (UNLIKELY(bits < until)) {
+		until = bits;
+	}
 	int i;
 	for (i = bits - until; i < bits; ++i) {
 		channel->samples[i] = channel->internalSample;
@@ -475,6 +481,10 @@ void GBAAudioSerialize(const struct GBAAudio* audio, struct GBASerializedState* 
 
 	GBASerializedAudioFlags2 flags2 = 0;
 	flags2 = GBASerializedAudioFlags2SetSampleIndex(flags2, audio->sampleIndex);
+	// This flag was introduced in 0.11 and will only ever be 0, 1 or 2, so we
+	// add 1 and use a non-zero value to mark its presence in the state file
+	flags2 = GBASerializedAudioFlags2SetChASource(flags2, audio->chA.dmaSource + 1);
+	flags2 = GBASerializedAudioFlags2SetChBSource(flags2, audio->chB.dmaSource + 1);
 	STORE_32(flags2, 0, &state->audio.gbaFlags2);
 
 	STORE_32(audio->sampleEvent.when - mTimingCurrentTime(&audio->p->timing), 0, &state->audio.nextSample);
@@ -526,6 +536,14 @@ void GBAAudioDeserialize(struct GBAAudio* audio, const struct GBASerializedState
 	GBASerializedAudioFlags2 flags2;
 	LOAD_32(flags2, 0, &state->audio.gbaFlags2);
 	audio->sampleIndex = GBASerializedAudioFlags2GetSampleIndex(flags2);
+	// This flag was introduced in 0.11 and will only ever be 0, 1 or 2, so we
+	// add 1 and use a non-zero value to mark its presence in the state file
+	if (GBASerializedAudioFlags2GetChASource(flags2) > 0) {
+		audio->chA.dmaSource = GBASerializedAudioFlags2GetChASource(flags2) - 1;
+	}
+	if (GBASerializedAudioFlags2GetChBSource(flags2) > 0) {
+		audio->chB.dmaSource = GBASerializedAudioFlags2GetChBSource(flags2) - 1;
+	}
 
 	uint32_t when;
 	LOAD_32(when, 0, &state->audio.nextSample);
