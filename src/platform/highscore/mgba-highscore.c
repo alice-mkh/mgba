@@ -33,6 +33,8 @@ struct _mGBACore
   float audio_samples_per_frame_avg;
 
   struct mLogger logger;
+
+  struct mRumbleIntegrator rumble;
 };
 
 static void mgba_game_boy_core_init (HsGameBoyCoreInterface *iface);
@@ -66,7 +68,8 @@ refresh_screen_area (mGBACore *self)
 }
 
 static void
-log_cb (struct mLogger* logger, int category, enum mLogLevel level, const char* format, va_list args) {
+log_cb (struct mLogger* logger, int category, enum mLogLevel level, const char* format, va_list args)
+{
   UNUSED(logger);
 
   HsLogLevel hs_level;
@@ -101,6 +104,13 @@ log_cb (struct mLogger* logger, int category, enum mLogLevel level, const char* 
   g_free (message);
 }
 
+static void
+set_rumble_cb (struct mRumbleIntegrator* rumble, float level)
+{
+  UNUSED(rumble);
+
+  hs_core_rumble (HS_CORE (core), 0, level, level);
+}
 
 static gboolean
 mgba_core_load_rom (HsCore      *core,
@@ -364,6 +374,9 @@ mgba_core_constructed (GObject *object)
   self->logger.log = log_cb;
   mLogSetDefaultLogger(&self->logger);
 
+  mRumbleIntegratorInit (&self->rumble);
+  self->rumble.setRumble = set_rumble_cb;
+
   self->core->init (self->core);
 
   if (is_gba (self)) {
@@ -396,6 +409,8 @@ mgba_core_constructed (GObject *object)
     self->core->setAVStream (self->core, &self->stream);
     self->core->setAudioBufferSize (self->core, GB_SAMPLES);
   }
+
+  self->core->setPeripheral (self->core, mPERIPH_RUMBLE, &self->rumble);
 }
 
 static void
