@@ -269,6 +269,8 @@ mgba_core_reload_save (HsCore      *core,
                        const char  *save_path,
                        GError     **error)
 {
+  UNUSED(error);
+
   mGBACore *self = MGBA_CORE (core);
 
   mCoreLoadSaveFile (self->core, save_path, FALSE);
@@ -548,6 +550,7 @@ mgba_game_boy_core_init (HsGameBoyCoreInterface *iface)
 static void
 mgba_game_boy_advance_core_init (HsGameBoyAdvanceCoreInterface *iface)
 {
+  UNUSED(iface);
 }
 
 GType
