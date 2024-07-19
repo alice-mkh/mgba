@@ -114,13 +114,16 @@ set_rumble_cb (struct mRumbleIntegrator* rumble, float level)
 
 static gboolean
 mgba_core_load_rom (HsCore      *core,
-                    const char  *rom_path,
+                    const char **rom_paths,
+                    int          n_rom_paths,
                     const char  *save_path,
                     GError     **error)
 {
   mGBACore *self = MGBA_CORE (core);
 
   unsigned width, height;
+
+  g_assert (n_rom_paths == 1);
 
   self->core->baseVideoSize (self->core, &width, &height);
 
@@ -132,7 +135,7 @@ mgba_core_load_rom (HsCore      *core,
                               hs_software_context_get_framebuffer (self->context),
                               width);
 
-  if (!mCoreLoadFile (self->core, rom_path)) {
+  if (!mCoreLoadFile (self->core, rom_paths[0])) {
     g_set_error (error, HS_CORE_ERROR, HS_CORE_ERROR_COULDNT_LOAD_ROM, "Failed to load ROM");
 
     return FALSE;
