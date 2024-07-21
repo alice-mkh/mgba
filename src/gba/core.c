@@ -1242,8 +1242,16 @@ static void _GBACoreDetachDebugger(struct mCore* core) {
 }
 
 static void _GBACoreLoadSymbols(struct mCore* core, struct VFile* vf) {
+	struct GBA* gba = core->board;
 	bool closeAfter = false;
-	core->symbolTable = mDebuggerSymbolTableCreate();
+	if (!core->symbolTable) {
+		core->symbolTable = mDebuggerSymbolTableCreate();
+	}
+	off_t seek;
+	if (vf) {
+		seek = vf->seek(vf, 0, SEEK_CUR);
+		vf->seek(vf, 0, SEEK_SET);
+	}
 #ifdef ENABLE_VFS
 #ifdef USE_ELF
 	if (!vf && core->dirs.base) {
@@ -1252,10 +1260,26 @@ static void _GBACoreLoadSymbols(struct mCore* core, struct VFile* vf) {
 	}
 #endif
 	if (!vf && core->dirs.base) {
-		closeAfter = true;
 		vf = mDirectorySetOpenSuffix(&core->dirs, core->dirs.base, ".sym", O_RDONLY);
+		if (vf) {
+			mDebuggerLoadARMIPSSymbols(core->symbolTable, vf);
+			vf->close(vf);
+			return;
+		}
 	}
 #endif
+	if (!vf && gba->mbVf) {
+		closeAfter = false;
+		vf = gba->mbVf;
+		seek = vf->seek(vf, 0, SEEK_CUR);
+		vf->seek(vf, 0, SEEK_SET);
+	}
+	if (!vf && gba->romVf) {
+		closeAfter = false;
+		vf = gba->romVf;
+		seek = vf->seek(vf, 0, SEEK_CUR);
+		vf->seek(vf, 0, SEEK_SET);
+	}
 	if (!vf) {
 		return;
 	}
@@ -1266,13 +1290,12 @@ static void _GBACoreLoadSymbols(struct mCore* core, struct VFile* vf) {
 		mCoreLoadELFSymbols(core->symbolTable, elf);
 #endif
 		ELFClose(elf);
-	} else
-#endif
-	{
-		mDebuggerLoadARMIPSSymbols(core->symbolTable, vf);
 	}
+#endif
 	if (closeAfter) {
 		vf->close(vf);
+	} else {
+		vf->seek(vf, seek, SEEK_SET);
 	}
 }
 
