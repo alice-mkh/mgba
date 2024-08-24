@@ -19,12 +19,14 @@ Emulation fixes:
  - GBA Serialize: Fix some minor save state edge cases
  - GBA SIO: Fix MULTI mode SIOCNT bit 7 writes on secondary GBAs (fixes mgba.io/i/3110)
  - GBA Video: Disable BG target 1 blending when OBJ blending (fixes mgba.io/i/2722)
+ - GBA Video: Improve emulation of window start/end conditions (fixes mgba.io/i/1945)
 Other fixes:
  - Core: Fix inconsistencies with setting game-specific overrides (fixes mgba.io/i/2963)
  - Debugger: Fix writing to specific segment in command-line debugger
  - GB: Fix uninitialized save data when loading undersized temporary saves
  - GB, GBA Core: Fix memory leak if reloading debug symbols
  - GB Serialize: Prevent loading invalid states where LY >= 144 in modes other than 1
+ - GBA: Fix getting game info for multiboot ROMs
  - GBA Audio: Fix crash if audio FIFOs and timers get out of sync
  - GBA Audio: Fix crash in audio subsampling if timing lockstep breaks
  - GBA Core: Fix loading symbols from ELF files if the file doesn't end with .elf
@@ -49,6 +51,7 @@ Misc:
  - Qt: Handle multiple save game files for disparate games separately (fixes mgba.io/i/2887)
  - Qt: Remove maligned double-click-to-fullscreen shortcut (closes mgba.io/i/2632)
  - Qt: Pass logging context through to video proxy thread (fixes mgba.io/i/3095)
+ - Qt: Show maker code and game version in ROM info
  - Scripting: Add `callbacks:oneshot` for single-call callbacks
  - Switch: Add bilinear filtering option (closes mgba.io/i/3111)
  - Vita: Add imc0 and xmc0 mount point support
