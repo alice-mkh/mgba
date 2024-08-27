@@ -1,6 +1,7 @@
 [Highscore]
 Name=mGBA
 Module=libmGBA-highscore.so
+Authors=Vicki Pfau;
 Copyright=Copyright © 2013 – 2023 Vicki Pfau;
 Website=https://mgba.io/
 License=MPL-2.0
