@@ -407,7 +407,7 @@ static size_t _GBCoreScreenRegions(const struct mCore* core, const struct mCoreS
 	}
 }
 
-static void _GBCoreSetVideoBuffer(struct mCore* core, color_t* buffer, size_t stride) {
+static void _GBCoreSetVideoBuffer(struct mCore* core, mColor* buffer, size_t stride) {
 	struct GBCore* gbcore = (struct GBCore*) core;
 	gbcore->renderer.outputBuffer = buffer;
 	gbcore->renderer.outputBufferStride = stride;
@@ -740,6 +740,18 @@ static bool _GBCoreSaveState(struct mCore* core, void* state) {
 		SM83Tick(cpu);
 	}
 	GBSerialize(core->board, state);
+	return true;
+}
+
+static bool _GBCoreLoadExtraState(struct mCore* core, const struct mStateExtdata* extdata) {
+	UNUSED(core);
+	UNUSED(extdata);
+	return true;
+}
+
+static bool _GBCoreSaveExtraState(struct mCore* core, struct mStateExtdata* extdata) {
+	UNUSED(core);
+	UNUSED(extdata);
 	return true;
 }
 
@@ -1254,12 +1266,12 @@ static void _GBCoreStartVideoLog(struct mCore* core, struct mVideoLogContext* co
 	gbcore->logContext = context;
 
 	int channelId = mVideoLoggerAddChannel(context);
-	gbcore->proxyRenderer.logger = malloc(sizeof(struct mVideoLogger));
-	mVideoLoggerRendererCreate(gbcore->proxyRenderer.logger, false);
-	mVideoLoggerAttachChannel(gbcore->proxyRenderer.logger, context, channelId);
-	gbcore->proxyRenderer.logger->block = false;
+	struct mVideoLogger* logger = malloc(sizeof(*logger));
+	mVideoLoggerRendererCreate(logger, false);
+	mVideoLoggerAttachChannel(logger, context, channelId);
+	logger->block = false;
 
-	GBVideoProxyRendererCreate(&gbcore->proxyRenderer, &gbcore->renderer.d);
+	GBVideoProxyRendererCreate(&gbcore->proxyRenderer, &gbcore->renderer.d, logger);
 	GBVideoProxyRendererShim(&gb->video, &gbcore->proxyRenderer);
 }
 
@@ -1321,6 +1333,8 @@ struct mCore* GBCoreCreate(void) {
 	core->stateSize = _GBCoreStateSize;
 	core->loadState = _GBCoreLoadState;
 	core->saveState = _GBCoreSaveState;
+	core->loadExtraState = _GBCoreLoadExtraState;
+	core->saveExtraState = _GBCoreSaveExtraState;
 	core->setKeys = _GBCoreSetKeys;
 	core->addKeys = _GBCoreAddKeys;
 	core->clearKeys = _GBCoreClearKeys;
@@ -1391,9 +1405,9 @@ static bool _GBVLPInit(struct mCore* core) {
 	if (!_GBCoreInit(core)) {
 		return false;
 	}
-	gbcore->proxyRenderer.logger = malloc(sizeof(struct mVideoLogger));
-	mVideoLoggerRendererCreate(gbcore->proxyRenderer.logger, true);
-	GBVideoProxyRendererCreate(&gbcore->proxyRenderer, NULL);
+	struct mVideoLogger* logger = malloc(sizeof(*logger));
+	mVideoLoggerRendererCreate(logger, true);
+	GBVideoProxyRendererCreate(&gbcore->proxyRenderer, NULL, logger);
 	memset(&gbcore->logCallbacks, 0, sizeof(gbcore->logCallbacks));
 	gbcore->logCallbacks.videoFrameStarted = _GBVLPStartFrameCallback;
 	gbcore->logCallbacks.context = core;

@@ -73,7 +73,7 @@ struct mCore {
 	unsigned (*videoScale)(const struct mCore*);
 	size_t (*screenRegions)(const struct mCore*, const struct mCoreScreenRegion**);
 
-	void (*setVideoBuffer)(struct mCore*, color_t* buffer, size_t stride);
+	void (*setVideoBuffer)(struct mCore*, mColor* buffer, size_t stride);
 	void (*setVideoGLTex)(struct mCore*, unsigned texid);
 
 	void (*getPixels)(struct mCore*, const void** buffer, size_t* stride);
@@ -109,6 +109,8 @@ struct mCore {
 	size_t (*stateSize)(struct mCore*);
 	bool (*loadState)(struct mCore*, const void* state);
 	bool (*saveState)(struct mCore*, void* state);
+	bool (*loadExtraState)(struct mCore*, const struct mStateExtdata*);
+	bool (*saveExtraState)(struct mCore*, struct mStateExtdata*);
 
 	void (*setKeys)(struct mCore*, uint32_t keys);
 	void (*addKeys)(struct mCore*, uint32_t keys);

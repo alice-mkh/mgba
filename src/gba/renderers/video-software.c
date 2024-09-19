@@ -14,10 +14,14 @@
 
 #define DIRTY_SCANLINE(R, Y) R->scanlineDirty[Y >> 5] |= (1U << (Y & 0x1F))
 #define CLEAN_SCANLINE(R, Y) R->scanlineDirty[Y >> 5] &= ~(1U << (Y & 0x1F))
+#define SOFTWARE_MAGIC 0x6E727773
 
 static void GBAVideoSoftwareRendererInit(struct GBAVideoRenderer* renderer);
 static void GBAVideoSoftwareRendererDeinit(struct GBAVideoRenderer* renderer);
 static void GBAVideoSoftwareRendererReset(struct GBAVideoRenderer* renderer);
+static uint32_t GBAVideoSoftwareRendererId(const struct GBAVideoRenderer* renderer);
+static bool GBAVideoSoftwareRendererLoadState(struct GBAVideoRenderer* renderer, const void* state, size_t size);
+static void GBAVideoSoftwareRendererSaveState(struct GBAVideoRenderer* renderer, void** state, size_t* size);
 static void GBAVideoSoftwareRendererWriteVRAM(struct GBAVideoRenderer* renderer, uint32_t address);
 static void GBAVideoSoftwareRendererWriteOAM(struct GBAVideoRenderer* renderer, uint32_t oam);
 static void GBAVideoSoftwareRendererWritePalette(struct GBAVideoRenderer* renderer, uint32_t address, uint16_t value);
@@ -47,9 +51,13 @@ static void _breakWindow(struct GBAVideoSoftwareRenderer* softwareRenderer, stru
 static void _breakWindowInner(struct GBAVideoSoftwareRenderer* softwareRenderer, struct WindowN* win);
 
 void GBAVideoSoftwareRendererCreate(struct GBAVideoSoftwareRenderer* renderer) {
+	memset(renderer, 0, sizeof(*renderer));
 	renderer->d.init = GBAVideoSoftwareRendererInit;
 	renderer->d.reset = GBAVideoSoftwareRendererReset;
 	renderer->d.deinit = GBAVideoSoftwareRendererDeinit;
+	renderer->d.rendererId = GBAVideoSoftwareRendererId;
+	renderer->d.loadState = GBAVideoSoftwareRendererLoadState;
+	renderer->d.saveState = GBAVideoSoftwareRendererSaveState;
 	renderer->d.writeVideoRegister = GBAVideoSoftwareRendererWriteVideoRegister;
 	renderer->d.writeVRAM = GBAVideoSoftwareRendererWriteVRAM;
 	renderer->d.writeOAM = GBAVideoSoftwareRendererWriteOAM;
@@ -79,7 +87,7 @@ void GBAVideoSoftwareRendererCreate(struct GBAVideoSoftwareRenderer* renderer) {
 	renderer->d.highlightColor = M_COLOR_WHITE;
 	renderer->d.highlightAmount = 0;
 
-	renderer->temporaryBuffer = 0;
+	renderer->temporaryBuffer = NULL;
 }
 
 static void GBAVideoSoftwareRendererInit(struct GBAVideoRenderer* renderer) {
@@ -89,7 +97,7 @@ static void GBAVideoSoftwareRendererInit(struct GBAVideoRenderer* renderer) {
 
 	int y;
 	for (y = 0; y < GBA_VIDEO_VERTICAL_PIXELS; ++y) {
-		color_t* row = &softwareRenderer->outputBuffer[softwareRenderer->outputBufferStride * y];
+		mColor* row = &softwareRenderer->outputBuffer[softwareRenderer->outputBufferStride * y];
 		int x;
 		for (x = 0; x < GBA_VIDEO_HORIZONTAL_PIXELS; ++x) {
 			row[x] = M_COLOR_WHITE;
@@ -153,6 +161,26 @@ static void GBAVideoSoftwareRendererReset(struct GBAVideoRenderer* renderer) {
 static void GBAVideoSoftwareRendererDeinit(struct GBAVideoRenderer* renderer) {
 	struct GBAVideoSoftwareRenderer* softwareRenderer = (struct GBAVideoSoftwareRenderer*) renderer;
 	UNUSED(softwareRenderer);
+}
+
+static uint32_t GBAVideoSoftwareRendererId(const struct GBAVideoRenderer* renderer) {
+	UNUSED(renderer);
+	return SOFTWARE_MAGIC;
+}
+
+static bool GBAVideoSoftwareRendererLoadState(struct GBAVideoRenderer* renderer, const void* state, size_t size) {
+	UNUSED(renderer);
+	UNUSED(state);
+	UNUSED(size);
+	// TODO
+	return false;
+}
+
+static void GBAVideoSoftwareRendererSaveState(struct GBAVideoRenderer* renderer, void** state, size_t* size) {
+	UNUSED(renderer);
+	*state = NULL;
+	*size = 0;
+	// TODO
 }
 
 static uint16_t GBAVideoSoftwareRendererWriteVideoRegister(struct GBAVideoRenderer* renderer, uint32_t address, uint16_t value) {
@@ -394,7 +422,7 @@ static void GBAVideoSoftwareRendererWriteOAM(struct GBAVideoRenderer* renderer, 
 
 static void GBAVideoSoftwareRendererWritePalette(struct GBAVideoRenderer* renderer, uint32_t address, uint16_t value) {
 	struct GBAVideoSoftwareRenderer* softwareRenderer = (struct GBAVideoSoftwareRenderer*) renderer;
-	color_t color = mColorFrom555(value);
+	mColor color = mColorFrom555(value);
 	softwareRenderer->normalPalette[address >> 1] = color;
 	if (softwareRenderer->blendEffect == BLEND_BRIGHTEN) {
 		softwareRenderer->variantPalette[address >> 1] = _brighten(color, softwareRenderer->bldy);
@@ -582,7 +610,7 @@ static void GBAVideoSoftwareRendererDrawScanline(struct GBAVideoRenderer* render
 
 	CLEAN_SCANLINE(softwareRenderer, y);
 
-	color_t* row = &softwareRenderer->outputBuffer[softwareRenderer->outputBufferStride * y];
+	mColor* row = &softwareRenderer->outputBuffer[softwareRenderer->outputBufferStride * y];
 	if (GBARegisterDISPCNTIsForcedBlank(softwareRenderer->dispcnt)) {
 		int x;
 		for (x = 0; x < GBA_VIDEO_HORIZONTAL_PIXELS; ++x) {
@@ -753,7 +781,7 @@ static void GBAVideoSoftwareRendererGetPixels(struct GBAVideoRenderer* renderer,
 static void GBAVideoSoftwareRendererPutPixels(struct GBAVideoRenderer* renderer, size_t stride, const void* pixels) {
 	struct GBAVideoSoftwareRenderer* softwareRenderer = (struct GBAVideoSoftwareRenderer*) renderer;
 
-	const color_t* colorPixels = pixels;
+	const mColor* colorPixels = pixels;
 	unsigned i;
 	for (i = 0; i < GBA_VIDEO_VERTICAL_PIXELS; ++i) {
 		memmove(&softwareRenderer->outputBuffer[softwareRenderer->outputBufferStride * i], &colorPixels[stride * i], GBA_VIDEO_HORIZONTAL_PIXELS * BYTES_PER_PIXEL);

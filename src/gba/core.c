@@ -7,6 +7,7 @@
 
 #include <mgba/core/core.h>
 #include <mgba/core/log.h>
+#include <mgba/core/serialize.h>
 #include <mgba/internal/arm/debugger/debugger.h>
 #include <mgba/internal/arm/isa-inlines.h>
 #include <mgba/internal/debugger/symbols.h>
@@ -469,8 +470,7 @@ static void _GBACoreReloadConfigOption(struct mCore* core, const char* option, c
 #endif
 #ifndef MINIMAL_CORE
 		if (renderer && core->videoLogger) {
-			gbacore->proxyRenderer.logger = core->videoLogger;
-			GBAVideoProxyRendererCreate(&gbacore->proxyRenderer, renderer);
+			GBAVideoProxyRendererCreate(&gbacore->proxyRenderer, renderer, core->videoLogger);
 			renderer = &gbacore->proxyRenderer.d;
 		}
 #endif
@@ -525,7 +525,7 @@ static size_t _GBACoreScreenRegions(const struct mCore* core, const struct mCore
 	return 1;
 }
 
-static void _GBACoreSetVideoBuffer(struct mCore* core, color_t* buffer, size_t stride) {
+static void _GBACoreSetVideoBuffer(struct mCore* core, mColor* buffer, size_t stride) {
 	struct GBACore* gbacore = (struct GBACore*) core;
 	gbacore->renderer.outputBuffer = buffer;
 	gbacore->renderer.outputBufferStride = stride;
@@ -711,8 +711,7 @@ static void _GBACoreReset(struct mCore* core) {
 #endif
 #ifndef MINIMAL_CORE
 		if (renderer && core->videoLogger) {
-			gbacore->proxyRenderer.logger = core->videoLogger;
-			GBAVideoProxyRendererCreate(&gbacore->proxyRenderer, renderer);
+			GBAVideoProxyRendererCreate(&gbacore->proxyRenderer, renderer, core->videoLogger);
 			renderer = &gbacore->proxyRenderer.d;
 		}
 #endif
@@ -829,6 +828,48 @@ static bool _GBACoreLoadState(struct mCore* core, const void* state) {
 
 static bool _GBACoreSaveState(struct mCore* core, void* state) {
 	GBASerialize(core->board, state);
+	return true;
+}
+
+static bool _GBACoreLoadExtraState(struct mCore* core, const struct mStateExtdata* extdata) {
+	struct GBA* gba = core->board;
+	struct mStateExtdataItem item;
+	bool ok = true;
+	if (mStateExtdataGet(extdata, EXTDATA_SUBSYSTEM_START + GBA_SUBSYSTEM_VIDEO_RENDERER, &item)) {
+		if ((uint32_t) item.size > sizeof(uint32_t)) {
+			uint32_t type;
+			LOAD_32(type, 0, item.data);
+			if (type == gba->video.renderer->rendererId(gba->video.renderer)) {
+				ok = gba->video.renderer->loadState(gba->video.renderer,
+				                                    (void*) ((uintptr_t) item.data + sizeof(uint32_t)),
+				                                    item.size - sizeof(type));
+			}
+		} else if (item.data) {
+			ok = false;
+		}
+	}
+	return ok;
+}
+
+static bool _GBACoreSaveExtraState(struct mCore* core, struct mStateExtdata* extdata) {
+	struct GBA* gba = core->board;
+	void* buffer = NULL;
+	size_t size = 0;
+	gba->video.renderer->saveState(gba->video.renderer, &buffer, &size);
+	if (size > 0 && buffer) {
+		struct mStateExtdataItem item;
+		item.size = size + sizeof(uint32_t);
+		item.data = malloc(item.size);
+		item.clean = free;
+		uint32_t type = gba->video.renderer->rendererId(gba->video.renderer);
+		STORE_32(type, 0, item.data);
+		memcpy((void*) ((uintptr_t) item.data + sizeof(uint32_t)), buffer, size);
+		mStateExtdataPut(extdata, EXTDATA_SUBSYSTEM_START + GBA_SUBSYSTEM_VIDEO_RENDERER, &item);
+	}
+	if (buffer) {
+		free(buffer);
+	}
+
 	return true;
 }
 
@@ -1473,12 +1514,12 @@ static void _GBACoreStartVideoLog(struct mCore* core, struct mVideoLogContext* c
 	state->cpu.gprs[ARM_PC] = GBA_BASE_EWRAM;
 
 	int channelId = mVideoLoggerAddChannel(context);
-	gbacore->vlProxy.logger = malloc(sizeof(struct mVideoLogger));
-	mVideoLoggerRendererCreate(gbacore->vlProxy.logger, false);
-	mVideoLoggerAttachChannel(gbacore->vlProxy.logger, context, channelId);
-	gbacore->vlProxy.logger->block = false;
+	struct mVideoLogger* logger = malloc(sizeof(*logger));
+	mVideoLoggerRendererCreate(logger, false);
+	mVideoLoggerAttachChannel(logger, context, channelId);
+	logger->block = false;
 
-	GBAVideoProxyRendererCreate(&gbacore->vlProxy, gba->video.renderer);
+	GBAVideoProxyRendererCreate(&gbacore->vlProxy, gba->video.renderer, logger);
 	GBAVideoProxyRendererShim(&gba->video, &gbacore->vlProxy);
 }
 
@@ -1539,6 +1580,8 @@ struct mCore* GBACoreCreate(void) {
 	core->stateSize = _GBACoreStateSize;
 	core->loadState = _GBACoreLoadState;
 	core->saveState = _GBACoreSaveState;
+	core->loadExtraState = _GBACoreLoadExtraState;
+	core->saveExtraState = _GBACoreSaveExtraState;
 	core->setKeys = _GBACoreSetKeys;
 	core->addKeys = _GBACoreAddKeys;
 	core->clearKeys = _GBACoreClearKeys;
@@ -1609,9 +1652,9 @@ static bool _GBAVLPInit(struct mCore* core) {
 	if (!_GBACoreInit(core)) {
 		return false;
 	}
-	gbacore->vlProxy.logger = malloc(sizeof(struct mVideoLogger));
-	mVideoLoggerRendererCreate(gbacore->vlProxy.logger, true);
-	GBAVideoProxyRendererCreate(&gbacore->vlProxy, NULL);
+	struct mVideoLogger* logger = malloc(sizeof(*logger));
+	mVideoLoggerRendererCreate(logger, true);
+	GBAVideoProxyRendererCreate(&gbacore->vlProxy, NULL, logger);
 	memset(&gbacore->logCallbacks, 0, sizeof(gbacore->logCallbacks));
 	gbacore->logCallbacks.videoFrameStarted = _GBAVLPStartFrameCallback;
 	gbacore->logCallbacks.context = core;

@@ -182,6 +182,10 @@ struct GBAVideoRenderer {
 	void (*reset)(struct GBAVideoRenderer* renderer);
 	void (*deinit)(struct GBAVideoRenderer* renderer);
 
+	uint32_t (*rendererId)(const struct GBAVideoRenderer* renderer);
+	bool (*loadState)(struct GBAVideoRenderer* renderer, const void* state, size_t size);
+	void (*saveState)(struct GBAVideoRenderer* renderer, void** state, size_t* size);
+
 	uint16_t (*writeVideoRegister)(struct GBAVideoRenderer* renderer, uint32_t address, uint16_t value);
 	void (*writeVRAM)(struct GBAVideoRenderer* renderer, uint32_t address);
 	void (*writePalette)(struct GBAVideoRenderer* renderer, uint32_t address, uint16_t value);
@@ -204,7 +208,7 @@ struct GBAVideoRenderer {
 
 	bool highlightBG[4];
 	bool highlightOBJ[128];
-	color_t highlightColor;
+	mColor highlightColor;
 	uint8_t highlightAmount;
 };
 
