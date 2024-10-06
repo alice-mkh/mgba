@@ -109,7 +109,7 @@ set_rumble_cb (struct mRumbleIntegrator* rumble, float level)
 {
   UNUSED(rumble);
 
-  hs_core_rumble (HS_CORE (core), 0, level, level, G_MAXUINT16);
+  hs_core_rumble (HS_CORE (core), 0, level, level, HS_MAX_RUMBLE_DURATION);
 }
 
 static gboolean
