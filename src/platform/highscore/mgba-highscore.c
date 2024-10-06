@@ -129,7 +129,7 @@ mgba_core_load_rom (HsCore      *core,
 
   self->context = hs_core_create_software_context (HS_CORE (self),
                                                    width, height,
-                                                   HS_PIXEL_FORMAT_XRGB8888);
+                                                   HS_PIXEL_FORMAT_R8G8B8X8);
 
   self->core->setVideoBuffer (self->core,
                               hs_software_context_get_framebuffer (self->context),
