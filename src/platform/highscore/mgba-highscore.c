@@ -531,23 +531,10 @@ mgba_game_boy_core_set_palette (HsGameBoyCore *core, int *colors, int n_colors)
 }
 
 static void
-mgba_game_boy_core_set_show_sgb_borders (HsGameBoyCore *core, gboolean show_borders)
-{
-  mGBACore *self = MGBA_CORE (core);
-
-  mCoreConfigSetDefaultIntValue (&self->core->config, "sgb.borders", show_borders ? 1 : 0);
-
-  self->core->reloadConfigOption (self->core, "sgb.borders", NULL);
-
-  refresh_screen_area (self);
-}
-
-static void
 mgba_game_boy_core_init (HsGameBoyCoreInterface *iface)
 {
   iface->set_model = mgba_game_boy_core_set_model;
   iface->set_palette = mgba_game_boy_core_set_palette;
-  iface->set_show_sgb_borders = mgba_game_boy_core_set_show_sgb_borders;
 }
 
 static void
