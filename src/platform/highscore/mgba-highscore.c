@@ -99,7 +99,7 @@ log_cb (struct mLogger* logger, int category, enum mLogLevel level, const char* 
 
   char *message = g_string_free_and_steal (builder);
 
-  hs_core_log (HS_CORE (core), hs_level, message);
+  hs_core_log_literal (HS_CORE (core), hs_level, message);
 
   g_free (message);
 }
