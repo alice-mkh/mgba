@@ -149,7 +149,7 @@ mgba_core_load_rom (HsCore      *core,
 }
 
 static void
-mgba_core_start (HsCore *core)
+mgba_core_start (HsCore *core, gboolean hard)
 {
   mGBACore *self = MGBA_CORE (core);
 
