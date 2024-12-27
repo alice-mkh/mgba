@@ -1022,11 +1022,8 @@ if(BUILD_HIGHSCORE)
 	install(TARGETS ${BINARY_NAME}-highscore LIBRARY DESTINATION ${HIGHSCORE_LIBDIR} COMPONENT ${BINARY_NAME}_highscore NAMELINK_SKIP)
 
 	file(READ ${CMAKE_CURRENT_SOURCE_DIR}/src/platform/highscore/mgba.highscore.in TEXT)
-	if(GIT_REV)
-		string(REPLACE "@version@" "${LIB_VERSION_STRING}-${GIT_REV}-g${GIT_COMMIT_SHORT}" TEXT "${TEXT}")
-	else()
-		string(REPLACE "@version@" "${LIB_VERSION_STRING}" TEXT "${TEXT}")
-	endif()
+	string(REPLACE "@version@" "${LIB_VERSION_STRING}" TEXT "${TEXT}")
+	string(REPLACE "@commit@" "${GIT_COMMIT_SHORT}" TEXT "${TEXT}")
 	file(GENERATE OUTPUT mgba.highscore CONTENT "${TEXT}")
 	set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS mgba.highscore.in)
 
