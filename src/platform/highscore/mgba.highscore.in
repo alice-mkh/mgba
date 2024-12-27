@@ -1,5 +1,6 @@
 [Highscore]
 Name=mGBA
+Version=@version@
 Module=libmGBA-highscore.so
 Authors=Vicki Pfau;
 Copyright=Copyright © 2013 – 2023 Vicki Pfau;

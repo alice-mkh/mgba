@@ -8,6 +8,7 @@ if(POLICY CMP0072)
 	cmake_policy(SET CMP0072 NEW)
 	set(OpenGL_GL_PREFERENCE LEGACY)
 endif()
+cmake_policy(SET CMP0070 NEW)
 
 project(mGBA)
 
@@ -1019,7 +1020,17 @@ if(BUILD_HIGHSCORE)
 	target_include_directories(${BINARY_NAME}-highscore PRIVATE ${GOBJECT_INCLUDE_DIRS} ${LIBHIGHSCORE_INCLUDE_DIRS})
 	target_link_libraries(${BINARY_NAME}-highscore ${OS_LIB} ${GOBJECT_LDFLAGS} ${LIBHIGHSCORE_LDFLAGS})
 	install(TARGETS ${BINARY_NAME}-highscore LIBRARY DESTINATION ${HIGHSCORE_LIBDIR} COMPONENT ${BINARY_NAME}_highscore NAMELINK_SKIP)
-	install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/src/platform/highscore/mgba.highscore DESTINATION ${HIGHSCORE_LIBDIR} COMPONENT ${BINARY_NAME}-highscore)
+
+	file(READ ${CMAKE_CURRENT_SOURCE_DIR}/src/platform/highscore/mgba.highscore.in TEXT)
+	if(GIT_REV)
+		string(REPLACE "@version@" "${LIB_VERSION_STRING}-${GIT_REV}-g${GIT_COMMIT_SHORT}" TEXT "${TEXT}")
+	else()
+		string(REPLACE "@version@" "${LIB_VERSION_STRING}" TEXT "${TEXT}")
+	endif()
+	file(GENERATE OUTPUT mgba.highscore CONTENT "${TEXT}")
+	set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS mgba.highscore.in)
+
+	install(FILES ${CMAKE_CURRENT_BINARY_DIR}/mgba.highscore DESTINATION ${HIGHSCORE_LIBDIR} COMPONENT ${BINARY_NAME}-highscore)
 endif()
 
 if(BUILD_QT AND (WIN32 OR APPLE OR CMAKE_SYSTEM_NAME STREQUAL "Linux") AND ENABLE_VFS)
