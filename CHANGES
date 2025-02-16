@@ -4,11 +4,13 @@ Features:
  - Custom border support
  - New option to lock the maximum frame size
  - Memory access and information logging
+ - 3DS: Add faster "loose" sync mode, default enabled
+ - Vita: Allow using rear touch pads as L2/L3/R2/R3
  - Scripting: New `input` API for getting raw keyboard/mouse/controller state
  - Scripting: New `storage` API for saving data for a script, e.g. settings
  - Scripting: New `image` and `canvas` APIs for drawing images and displaying on-screen
  - Scripting: Debugger integration to allow for breakpoints and watchpoints
- - New unlicensed GB mappers: NT (older types 1 and 2), Li Cheng, GGB-81
+ - New unlicensed GB mappers: NT (older types 1 and 2), Li Cheng, GGB-81, Sintax
  - Initial support for bootleg GBA multicarts
  - Debugger: Add range watchpoints
  - "Headless" frontend for running tests, automation, etc.
@@ -59,6 +61,7 @@ Misc:
  - Qt: Allow passing multiple games on command line for multiplayer (closes mgba.io/i/3061)
  - Qt: Support building against Qt 6
  - Qt: Add shortcuts to increment fast forward speed (mgba.io/i/2903)
+ - Qt: Enable ROM preloading by default
  - Res: Port hq2x and OmniScale shaders from SameBoy
  - Res: Port NSO-gba-colors shader (closes mgba.io/i/2834)
  - Res: Update gba-colors shader (closes mgba.io/i/2976)
