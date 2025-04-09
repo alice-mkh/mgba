@@ -68,8 +68,9 @@ struct GBACartridgeHardware {
 	enum GPIODirection readWrite;
 	uint16_t* gpioBase;
 
-	uint16_t pinState;
-	uint16_t direction;
+	uint8_t writeLatch;
+	uint8_t pinState;
+	uint8_t direction;
 
 	struct GBARTC rtc;
 
