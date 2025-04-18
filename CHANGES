@@ -31,6 +31,7 @@ Other fixes:
  - Qt: Fix savestate preview sizes with different scales (fixes mgba.io/i/2560)
  - Qt: Fix potential crash when configuring shortcuts
  - Qt: Fix regression where loading BIOS creates a save file (fixes mgba.io/i/3359)
+ - Qt: Fix selecting high tiles in tile and map views (fixes mgba.io/i/3461)
 Misc:
  - 3DS: Change title ID to avoid conflict with commercial title (fixes mgba.io/i/3023)
  - Core: Handle relative paths for saves, screenshots, etc consistently (fixes mgba.io/i/2826)
@@ -60,6 +61,7 @@ Misc:
  - Qt: Support building against Qt 6
  - Qt: Add shortcuts to increment fast forward speed (mgba.io/i/2903)
  - Qt: Enable ROM preloading by default
+ - Qt: Throttle fatal error dialogs
  - Res: Port hq2x and OmniScale shaders from SameBoy
  - Res: Port NSO-gba-colors shader (closes mgba.io/i/2834)
  - Res: Update gba-colors shader (closes mgba.io/i/2976)
