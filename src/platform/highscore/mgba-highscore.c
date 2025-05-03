@@ -35,6 +35,9 @@ struct _mGBACore
   struct mLogger logger;
 
   struct mRumbleIntegrator rumble;
+
+  enum GBModel gb_model;
+  int colorburst_phase;
 };
 
 static void mgba_game_boy_core_init (HsGameBoyCoreInterface *iface);
@@ -264,6 +267,13 @@ mgba_core_run_frame (HsCore *core)
       if (produced > 0)
         hs_core_play_samples (core, self->audio_buffer, produced * 2);
     }
+  } else {
+    if (self->gb_model == GB_MODEL_SGB || self->gb_model == GB_MODEL_SGB2)
+      self->colorburst_phase ^= 1;
+    else
+      self->colorburst_phase = 0;
+
+    hs_software_context_set_colorburst_phase (self->context, self->colorburst_phase);
   }
 }
 
@@ -499,6 +509,8 @@ mgba_game_boy_core_set_model (HsGameBoyCore *core, HsGameBoyModel model)
   }
 
   model_name = GBModelToName (mgba_model);
+
+  self->gb_model = mgba_model;
 
   mCoreConfigSetDefaultValue (&self->core->config, "gb.model", model_name);
   mCoreConfigSetDefaultValue (&self->core->config, "sgb.model", model_name);
