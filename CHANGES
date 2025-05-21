@@ -18,8 +18,10 @@ Features:
 Emulation fixes:
  - ARM: Add framework for coprocessor support
  - GB Memory: Initialize HRAM when skipping BIOS in GBC mode (fixes mgba.io/i/3420)
+ - GB Memory: Fix initial WRAM pattern when skipping BIOS in GBC mode (fixes mgba.io/i/2704)
  - GB Serialize: Add missing Pocket Cam state to savestates
  - GB Video: Implement DMG-style sprite ordering
+ - GB Video: Fix window enable edge case (fixes mgba.io/i/2640)
  - GBA: Unhandled bkpt should be treated as an undefined exception
  - GBA: Add baseline CP0 (Wii U VC) and CP1 (DCC) implementations
  - GBA Serialize: Fix some minor save state edge cases
@@ -67,6 +69,7 @@ Misc:
  - Res: Port hq2x and OmniScale shaders from SameBoy
  - Res: Port NSO-gba-colors shader (closes mgba.io/i/2834)
  - Res: Update gba-colors shader (closes mgba.io/i/2976)
+ - Res: Port more Pokefan531 color shaders (closes mgba.io/i/3437)
  - Scripting: Add `callbacks:oneshot` for single-call callbacks
 
 0.10.5: (2025-03-08)
