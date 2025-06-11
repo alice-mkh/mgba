@@ -27,6 +27,7 @@ Emulation fixes:
  - GBA Serialize: Fix some minor save state edge cases
  - GBA Video: Disable BG target 1 blending when OBJ blending (fixes mgba.io/i/2722)
  - GBA Video: Improve emulation of window start/end conditions (fixes mgba.io/i/1945)
+ - GBA Video: Fix transparent OBJWIN pixel/sprite priority interaction (fixes mgba.io/i/2809)
 Other fixes:
  - Core: Fix inconsistencies with setting game-specific overrides (fixes mgba.io/i/2963)
  - Debugger: Fix writing to specific segment in command-line debugger
@@ -50,6 +51,8 @@ Misc:
  - GBA: Improve detection of valid ELF ROMs
  - GBA Audio: Remove broken XQ audio pending rewrite
  - GBA BIOS: Move SoftReset implementation to assembly
+ - GBA e-Reader: Use geometric mean instead of arithmetic mean when detecting parameters
+ - GBA e-Reader: Disable strict mode when scanning cards
  - GBA Memory: Improve VRAM access stall cycle estimation
  - GBA SIO: Rewrite lockstep driver for improved stability
  - GBA Video: Add special circlular window handling in OpenGL renderer
@@ -67,6 +70,7 @@ Misc:
  - Qt: Add shortcuts to increment fast forward speed (mgba.io/i/2903)
  - Qt: Enable ROM preloading by default
  - Qt: Throttle fatal error dialogs
+ - Qt: Add save info to bug report logs
  - Res: Port hq2x and OmniScale shaders from SameBoy
  - Res: Port NSO-gba-colors shader (closes mgba.io/i/2834)
  - Res: Update gba-colors shader (closes mgba.io/i/2976)
