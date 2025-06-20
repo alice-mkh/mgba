@@ -356,6 +356,17 @@ mgba_core_get_sample_rate (HsCore *core)
   return self->core->audioSampleRate (self->core);
 }
 
+static HsRegion
+mgba_core_get_region (HsCore *core)
+{
+  mGBACore *self = MGBA_CORE (core);
+
+  if (!is_gba (self) && (self->gb_model == GB_MODEL_SGB || self->gb_model == GB_MODEL_SGB2))
+    return HS_REGION_NTSC;
+
+  return HS_REGION_UNKNOWN;
+}
+
 static void
 postAudioBuffer (struct mAVStream* stream, struct mAudioBuffer* buffer)
 {
@@ -474,6 +485,8 @@ mgba_core_class_init (mGBACoreClass *klass)
   core_class->get_aspect_ratio = mgba_core_get_aspect_ratio;
 
   core_class->get_sample_rate = mgba_core_get_sample_rate;
+
+  core_class->get_region = mgba_core_get_region;
 }
 
 static void
