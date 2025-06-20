@@ -336,10 +336,16 @@ mgba_core_get_aspect_ratio (HsCore *core)
 {
   mGBACore *self = MGBA_CORE (core);
   unsigned width, height;
+  double par;
 
   self->core->currentVideoSize (self->core, &width, &height);
 
-  return (double) width / (double) height;
+  if (!is_gba (self) && (self->gb_model == GB_MODEL_SGB || self->gb_model == GB_MODEL_SGB2))
+    par = 8.0 / 7.0;
+  else
+    par = 1.0;
+
+  return (double) width / (double) height * par;
 }
 
 static double
