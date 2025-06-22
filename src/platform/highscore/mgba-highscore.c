@@ -25,6 +25,7 @@ struct _mGBACore
 
   struct mCore *core;
   HsSoftwareContext *context;
+  guint8 *frame_buffer;
 
   size_t audio_buffer_size;
   int16_t *audio_buffer;
@@ -103,10 +104,9 @@ mgba_core_load_rom (HsCore      *core,
   self->context = hs_core_create_software_context (HS_CORE (self),
                                                    width, height,
                                                    HS_PIXEL_FORMAT_R8G8B8X8);
+  self->frame_buffer = g_new0 (guint8, width * height * 4);
 
-  self->core->setVideoBuffer (self->core,
-                              hs_software_context_get_framebuffer (self->context),
-                              width);
+  self->core->setVideoBuffer (self->core, (void *) self->frame_buffer, width);
 
   if (!mCoreLoadFile (self->core, rom_paths[0])) {
     g_set_error (error, HS_CORE_ERROR, HS_CORE_ERROR_COULDNT_LOAD_ROM, "Failed to load ROM");
@@ -143,6 +143,7 @@ mgba_core_stop (HsCore *core)
   mGBACore *self = MGBA_CORE (core);
 
   g_clear_object (&self->context);
+  g_clear_pointer (&self->frame_buffer, g_free);
 }
 
 const int BUTTON_MAPPING[] = {
@@ -180,6 +181,13 @@ mgba_core_run_frame (HsCore *core)
   mGBACore *self = MGBA_CORE (core);
 
   self->core->runFrame (self->core);
+
+  unsigned width, height;
+  self->core->baseVideoSize (self->core, &width, &height);
+
+  guint8 *fb = hs_software_context_acquire_framebuffer (self->context);
+  memcpy (fb, self->frame_buffer, width * height * 4);
+  hs_software_context_release_framebuffer (self->context);
 
   struct mAudioBuffer *buffer = self->core->getAudioBuffer (self->core);
   int available = mAudioBufferAvailable (buffer);
