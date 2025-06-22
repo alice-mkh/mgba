@@ -3,14 +3,10 @@
 #include <mgba/core/core.h>
 #include <mgba/core/log.h>
 #include <mgba/core/serialize.h>
-#include <mgba/gb/core.h>
-#include <mgba/gb/interface.h>
 #include <mgba/gba/core.h>
-#include <mgba/internal/gb/gb.h>
-#include <mgba/internal/gb/input.h>
-#include <mgba/internal/gb/overrides.h>
 #include <mgba/internal/gba/input.h>
 
+#include <mgba-util/audio-buffer.h>
 #include <mgba-util/crc32.h>
 #include <mgba-util/image.h>
 #include <mgba-util/vfs.h>
