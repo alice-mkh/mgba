@@ -123,6 +123,7 @@ mgba_core_start (HsCore *core)
   mGBACore *self = MGBA_CORE (core);
 
   self->core->reset (self->core);
+  mRumbleIntegratorInit (&self->rumble);
 }
 
 static void
