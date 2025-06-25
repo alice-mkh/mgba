@@ -123,7 +123,6 @@ mgba_core_start (HsCore *core)
   mGBACore *self = MGBA_CORE (core);
 
   self->core->reset (self->core);
-  mRumbleIntegratorInit (&self->rumble);
 }
 
 static gboolean
@@ -132,6 +131,10 @@ mgba_core_reset (HsCore *core, gboolean hard, GError **error)
   mGBACore *self = MGBA_CORE (core);
 
   self->core->reset (self->core);
+  mRumbleIntegratorReset (&self->rumble);
+
+  UNUSED(hard);
+  UNUSED(error);
 
   return TRUE;
 }
