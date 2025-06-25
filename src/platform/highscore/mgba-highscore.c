@@ -132,8 +132,8 @@ mgba_core_start (HsCore *core)
   self->core->reset (self->core);
 }
 
-static void
-mgba_core_reset (HsCore *core, gboolean hard)
+static gboolean
+mgba_core_reset (HsCore *core, gboolean hard, GError **error)
 {
   mGBACore *self = MGBA_CORE (core);
 
@@ -143,6 +143,8 @@ mgba_core_reset (HsCore *core, gboolean hard)
   self->rumble_down = 0;
 
   UNUSED(hard);
+
+  return TRUE;
 }
 
 static void
