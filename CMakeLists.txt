@@ -145,7 +145,7 @@ if (BUILD_LIBRETRO)
 endif()
 
 if (BUILD_HIGHSCORE)
-	set(HIGHSCORE_LIBDIR "${LIBDIR}/highscore/cores" CACHE PATH "Installed library directory (Highscore)")
+	set(HIGHSCORE_LIBDIR "${LIBDIR}/highscore/cores/mgba" CACHE PATH "Installed library directory (Highscore)")
 	mark_as_advanced(HIGHSCORE_LIBDIR)
 endif()
 
