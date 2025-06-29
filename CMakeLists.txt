@@ -8,6 +8,7 @@ if(POLICY CMP0072)
 	cmake_policy(SET CMP0072 NEW)
 	set(OpenGL_GL_PREFERENCE LEGACY)
 endif()
+cmake_policy(SET CMP0070 NEW)
 
 project(mGBA)
 
