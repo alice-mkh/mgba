@@ -343,7 +343,6 @@ static void GBAProcessEvents(struct ARMCore* cpu) {
 #ifdef ENABLE_DEBUGGERS
 			gba->timing.globalCycles += cycles < nextEvent ? nextEvent : cycles;
 #endif
-			mASSERT_DEBUG_LOG(GBA, cycles >= 0, "Negative cycles passed: %i", cycles);
 			nextEvent = mTimingTick(&gba->timing, cycles < nextEvent ? nextEvent : cycles);
 		} while (gba->cpuBlocked && !gba->earlyExit);
 
@@ -353,8 +352,6 @@ static void GBAProcessEvents(struct ARMCore* cpu) {
 			if (!gba->memory.io[GBA_REG(IME)] || !gba->memory.io[GBA_REG(IE)]) {
 				break;
 			}
-		} else {
-			mASSERT_DEBUG_LOG(GBA, nextEvent >= 0, "Negative cycles will pass: %i", nextEvent);
 		}
 		if (gba->earlyExit) {
 			break;
@@ -627,6 +624,11 @@ void GBADebug(struct GBA* gba, uint16_t flags) {
 		mLog(_mLOG_CAT_GBA_DEBUG, level, "%s", oolBuf);
 	}
 	gba->debugFlags = GBADebugFlagsClearSend(gba->debugFlags);
+}
+
+void GBAInterrupt(struct GBA* gba) {
+	gba->earlyExit = true;
+	mTimingInterrupt(&gba->timing);
 }
 
 #ifdef USE_ELF
