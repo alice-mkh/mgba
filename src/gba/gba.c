@@ -81,10 +81,9 @@ static void GBAInit(void* cpu, struct mCPUComponent* component) {
 	gba->cpu->cp[14].mcr = GBACP14Write;
 	GBAMemoryInit(gba);
 
-	gba->memory.savedata.timing = &gba->timing;
 	gba->memory.savedata.vf = NULL;
 	gba->memory.savedata.realVf = NULL;
-	gba->memory.savedata.gpio = &gba->memory.hw;
+	gba->memory.savedata.p = gba;
 	GBASavedataInit(&gba->memory.savedata, NULL);
 
 	gba->video.p = gba;
@@ -957,14 +956,7 @@ void GBABreakpoint(struct ARMCore* cpu, int immediate) {
 
 void GBAFrameStarted(struct GBA* gba) {
 	GBATestKeypadIRQ(gba);
-
-	size_t c;
-	for (c = 0; c < mCoreCallbacksListSize(&gba->coreCallbacks); ++c) {
-		struct mCoreCallbacks* callbacks = mCoreCallbacksListGetPointer(&gba->coreCallbacks, c);
-		if (callbacks->videoFrameStarted) {
-			callbacks->videoFrameStarted(callbacks->context);
-		}
-	}
+	mCALLBACKS_INVOKE(gba, videoFrameStarted);
 }
 
 void GBAFrameEnded(struct GBA* gba) {
