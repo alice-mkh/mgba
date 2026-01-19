@@ -151,8 +151,6 @@ static bool _initGpu(void) {
 }
 
 static void _cleanup(void) {
-	ctrDeinitGpu();
-
 	if (outputBuffer) {
 		linearFree(outputBuffer);
 		outputBuffer = NULL;
@@ -169,6 +167,8 @@ static void _cleanup(void) {
 	C3D_TexDelete(&outputTexture[0]);
 	C3D_TexDelete(&outputTexture[1]);
 	C3D_Fini();
+
+	ctrDeinitGpu();
 
 	gfxExit();
 
@@ -1039,7 +1039,11 @@ int main(int argc, char* argv[]) {
 				.nStates = 3
 			}
 		},
+#ifdef M_CORE_GBA
 		.nConfigExtra = 4,
+#else
+		.nConfigExtra = 5,
+#endif
 		.setup = _setup,
 		.teardown = 0,
 		.gameLoaded = _gameLoaded,
@@ -1055,7 +1059,9 @@ int main(int argc, char* argv[]) {
 		.running = _running
 	};
 
+	runner.autosave.pending = false;
 	runner.autosave.running = true;
+	runner.autosave.core = NULL;
 	MutexInit(&runner.autosave.mutex);
 	ConditionInit(&runner.autosave.cond);
 
