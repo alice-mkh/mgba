@@ -1066,7 +1066,7 @@ int main(int argc, char* argv[]) {
 	ConditionInit(&runner.autosave.cond);
 
 	APT_SetAppCpuTimeLimit(20);
-	runner.autosave.thread = threadCreate(mGUIAutosaveThread, &runner.autosave, 0x4000, 0x1F, 1, true);
+	runner.autosave.thread = threadCreate(mGUIAutosaveThread, &runner.autosave, 0x2000, 0x1F, 1, false);
 
 	Thread thread2;
 	if (ThreadCreate(&thread2, _core2Test, NULL) == 0) {
@@ -1093,6 +1093,7 @@ int main(int argc, char* argv[]) {
 		useRomfs = mGUIGetRom(&runner, initialPath, sizeof(initialPath));
 		if (!useRomfs) {
 			romfsExit();
+			GUIFontDestroy(font);
 			_cleanup();
 			return 1;
 		}
@@ -1110,6 +1111,7 @@ int main(int argc, char* argv[]) {
 	if (useRomfs) {
 		romfsExit();
 	}
+	GUIFontDestroy(font);
 	_cleanup();
 	return 0;
 }
