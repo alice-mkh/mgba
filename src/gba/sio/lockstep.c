@@ -132,6 +132,22 @@ static void _verifyAwake(struct GBASIOLockstepCoordinator* coordinator) {
 #endif
 }
 
+static void _abortTransfer(struct GBASIOLockstepCoordinator* coordinator, struct GBASIOLockstepPlayer* player) {
+	mLOG(GBA_SIO, DEBUG, "Aborting in-progress transfer");
+	// TODO: Do we need to clean this up better?
+	coordinator->transferActive = false;
+	coordinator->waiting = 0;
+
+	if (player->playerId != 0) {
+		struct GBASIOLockstepPlayer* runner = TableLookup(&coordinator->players, coordinator->attachedPlayers[0]);
+		if (runner) {
+			GBASIOLockstepPlayerWake(runner);
+		}
+	} else {
+		GBASIOLockstepCoordinatorWakePlayers(coordinator);
+	}
+}
+
 void GBASIOLockstepDriverCreate(struct GBASIOLockstepDriver* driver, struct mLockstepUser* user) {
 	memset(driver, 0, sizeof(*driver));
 	driver->d.init = GBASIOLockstepDriverInit;
@@ -216,8 +232,21 @@ static void GBASIOLockstepDriverReset(struct GBASIODriver* driver) {
 			_enqueueEvent(coordinator, &event, TARGET_ALL & ~TARGET(player->playerId));
 		}
 	} else {
+		MutexLock(&coordinator->mutex);
 		player = TableLookup(&coordinator->players, lockstep->lockstepId);
 		player->cycleOffset = mTimingCurrentTime(&driver->p->p->timing) - coordinator->cycle;
+	}
+
+	if (coordinator->transferActive) {
+		_abortTransfer(coordinator, player);
+		player->asleep = false;
+	}
+	if (player->playerId == 0 && coordinator->nAttached > 1) {
+		coordinator->waiting = 0;
+		// We will immediately go back to sleep when the initial mode gets set,
+		// so we need to clear this here to avoid triggering an assert later.
+		player->asleep = false;
+		GBASIOLockstepCoordinatorWakePlayers(coordinator);
 	}
 
 	if (mTimingIsScheduled(&lockstep->d.p->p->timing, &lockstep->event)) {
@@ -458,7 +487,6 @@ static void GBASIOLockstepDriverSetMode(struct GBASIODriver* driver, enum GBASIO
 			.mode = mode,
 		};
 		if (player->playerId == 0) {
-			mASSERT_DEBUG(!coordinator->transferActive); // TODO
 			coordinator->transferMode = mode;
 			GBASIOLockstepCoordinatorWaitOnPlayers(coordinator, player);
 		}
@@ -517,7 +545,11 @@ static bool GBASIOLockstepDriverStart(struct GBASIODriver* driver) {
 	bool ret = false;
 	MutexLock(&coordinator->mutex);
 	if (coordinator->transferActive) {
-		mLOG(GBA_SIO, ERROR, "Transfer restarted unexpectedly");
+		mLOG(GBA_SIO, GAME_ERROR, "Transfer restarted unexpectedly");
+		goto out;
+	}
+	if (coordinator->nAttached < 2) {
+		mLOG(GBA_SIO, DEBUG, "Attempted to start transfer with no secondary players");
 		goto out;
 	}
 	struct GBASIOLockstepPlayer* player = TableLookup(&coordinator->players, lockstep->lockstepId);
@@ -938,6 +970,10 @@ void _lockstepEvent(struct mTiming* timing, void* context, uint32_t cyclesLate) 
 			GBASIOLockstepCoordinatorAckPlayer(coordinator, player);
 			break;
 		case SIO_EV_MODE_SET:
+			if (coordinator->transferActive && player->mode != event->mode) {
+				mLOG(GBA_SIO, DEBUG, "Switching modes while transfer is active");
+				_abortTransfer(coordinator, player);
+			}
 			_setReady(coordinator, player, event->playerId, event->mode);
 			if (event->playerId == 0) {
 				GBASIOLockstepCoordinatorAckPlayer(coordinator, player);
