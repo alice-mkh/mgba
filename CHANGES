@@ -5,6 +5,7 @@ Features:
  - New option to lock the maximum frame size
  - Memory access and information logging
  - Cheats: Add support for CodeBreaker 5XXXXXXX "Super" codes
+ - Cheats: Add support for additional, undocumented GameShark IF code types
  - 3DS: Add faster "loose" sync mode, default enabled
  - Vita: Allow using rear touch pads as L2/L3/R2/R3
  - Scripting: New `input` API for getting raw keyboard/mouse/controller state
@@ -57,6 +58,7 @@ Other fixes:
  - Qt: Fix some actions disabled in multiplayer staying disabled after closing game
  - Qt: Fix unexpected mute when window becomes focused while fast-forwarding
  - Qt: Fix crashes when exiting with OpenGL renderer
+ - Qt: Fix hiding menu if fullscreen is entered by WM itself (fixes mgba.io/i/3713)
 Misc:
  - 3DS: Change title ID to avoid conflict with commercial title (fixes mgba.io/i/3023)
  - Core: Handle relative paths for saves, screenshots, etc consistently (fixes mgba.io/i/2826)
@@ -104,6 +106,7 @@ Misc:
  - Qt: Sort shader uniforms based on order in file
  - Qt: Allow downgrading across update channels
  - Qt: Prevent both gyro and RTC sensors from being enabled at the same time
+ - Qt: Put fullscreen information in report view
  - Res: Port hq2x and OmniScale shaders from SameBoy
  - Res: Port NSO-gba-colors shader (closes mgba.io/i/2834)
  - Res: Update gba-colors shader (closes mgba.io/i/2976)
