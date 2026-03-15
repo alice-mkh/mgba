@@ -46,6 +46,7 @@ Emulation fixes:
 Other fixes:
  - 3DS: Don't detach autosave thread (fixes mgba.io/i/3561)
  - Core: Fix inconsistencies with setting game-specific overrides (fixes mgba.io/i/2963)
+ - Core: Don't leave initial empty state in rewind queue
  - Debugger: Fix writing to specific segment in command-line debugger
  - GB Video: Fix video log replaying freezing when video is disabled
  - GBA: Fix getting game info for multiboot ROMs
@@ -68,6 +69,7 @@ Misc:
  - Core: Add support for specifying an arbitrary portable directory
  - Core: Add SHA1 hashing for ROMs
  - Core: Add callback for memoryBlocksChanged (fixes mgba.io/i/3640)
+ - Core: Pause a rewinding thread when empty instead of running one frame repeatedly
  - FFmpeg: Add Ut Video option
  - GB: Prevent incompatible BIOSes from being used on differing models
  - GB: Allow use of some bootleg BIOSes
