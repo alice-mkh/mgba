@@ -143,8 +143,8 @@ struct mCore {
 	void* (*getMemoryBlock)(struct mCore*, size_t id, size_t* sizeOut);
 
 	size_t (*listRegisters)(const struct mCore*, const struct mCoreRegisterInfo**);
-	bool (*readRegister)(const struct mCore*, const char* name, void* out);
-	bool (*writeRegister)(struct mCore*, const char* name, const void* in);
+	bool (*readRegister)(const struct mCore*, const char* name, int32_t* out);
+	bool (*writeRegister)(struct mCore*, const char* name, int32_t in);
 
 #ifdef ENABLE_DEBUGGERS
 	bool (*supportsDebuggerType)(struct mCore*, enum mDebuggerType);
@@ -216,7 +216,9 @@ void mCoreSetRTC(struct mCore* core, struct mRTCSource* rtc);
 
 void* mCoreGetMemoryBlock(struct mCore* core, uint32_t start, size_t* size);
 void* mCoreGetMemoryBlockMasked(struct mCore* core, uint32_t start, size_t* size, uint32_t mask);
-const struct mCoreMemoryBlock* mCoreGetMemoryBlockInfo(struct mCore* core, uint32_t address);
+const struct mCoreMemoryBlock* mCoreGetMemoryBlockInfo(const struct mCore* core, uint32_t address);
+
+const struct mCoreRegisterInfo* mCoreGetRegisterInfo(const struct mCore* core, const char* name);
 
 double mCoreCalculateFramerateRatio(const struct mCore* core, double desiredFrameRate);
 
