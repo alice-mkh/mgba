@@ -117,6 +117,12 @@ mgba_core_load_rom (HsCore      *core,
     return FALSE;
   }
 
+  const char *bios_path = hs_core_query_firmware_path (HS_CORE (self), HS_GAME_BOY_ADVANCE_FIRMWARE_BIOS);
+  if (bios_path) {
+    struct VFile* bios = VFileOpen (bios_path, O_RDONLY);
+    self->core->loadBIOS (self->core, bios, 0);
+  }
+
   self->core->reset (self->core);
 
   mCoreLoadSaveFile (self->core, save_path, FALSE);
