@@ -8,3 +8,6 @@ Copyright=Copyright © 2013 – 2025 Vicki Pfau;
 Website=https://mgba.io/
 License=MPL-2.0
 Platforms=GameBoyAdvance;
+
+[Firmware:GameBoyAdvance]
+bios=optional
