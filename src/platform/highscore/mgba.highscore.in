@@ -6,6 +6,9 @@ Module=libmGBA-highscore.so
 Authors=Vicki Pfau;
 Copyright=Copyright © 2013 – 2025 Vicki Pfau;
 Website=https://mgba.io/
+Donate=https://www.patreon.com/mgba
+SourceCode=https://github.com/highscore-emu/mgba
+Issues=https://github.com/highscore-emu/mgba
 License=MPL-2.0
 Platforms=GameBoyAdvance;
 
